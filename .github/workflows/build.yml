@@ -9,6 +9,16 @@ jobs:
     name: build on ${{ matrix.arch }}
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     steps:
+      - name: install podman
+        if: matrix.arch == 'arm64'
+        run: |
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends podman uidmap slirp4netns dbus-user-session
+          id="$(id -u)"
+          sudo systemctl start user@$id
+          export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$id/bus
+          systemctl --user start dbus
+          mkdir -p "$HOME/.config/containers"
+          echo 'unqualified-search-registries = ["docker.io"]' > "$HOME/.config/containers/registries.conf"
       - name: checkout
         uses: actions/checkout@v4
       - name: setup devcontainer
