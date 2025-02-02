@@ -26,4 +26,6 @@ jobs:
       - name: setup devcontainer
         run: podman build -t dev .devcontainer
       - name: build
-        run: podman run --rm --read-only -v "$PWD:/workspace" -w /workspace dev make
+        run: podman run --rm --read-only -v "$PWD:/workspace" -w /workspace dev make all
+      - name: test
+        run: podman run --rm --read-only -v "$PWD:/workspace" -w /workspace dev make test
