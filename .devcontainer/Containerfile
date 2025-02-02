@@ -3,6 +3,7 @@ RUN apt-get update \
 && apt-get install --no-install-recommends -y \
 	bsdextrautils \
 	build-essential \
+	gdb-multiarch \
 	git \
 	nasm \
 	qemu-system-x86 \
