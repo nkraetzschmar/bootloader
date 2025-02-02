@@ -1,0 +1,6 @@
+{
+	"name": "dev",
+	"build": {
+		"dockerfile": "Containerfile"
+	}
+}
