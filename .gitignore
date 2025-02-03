@@ -1,2 +1,7 @@
-mbr.bin
+*.bin
+*.elf
+*.o
+bootloader_emu
+dependencies.make
+disk
 serial.log
