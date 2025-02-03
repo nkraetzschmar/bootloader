@@ -5,6 +5,12 @@ mbr:
 	.size:    equ 0x000001be
 	.padding: equ 0x000001fe
 
+absolute 0x00008000
+stage2:
+	.size:    equ 0x00004000
+	.lba:     equ 0x000000022
+	.sectors: equ .size / 0x200
+
 section .text
 
 org mbr
@@ -28,8 +34,29 @@ BITS 16
 	mov      ax,       0x0002                   ; ah=0x00 (set video mode) al=0x02 (video mode 2: text mode 80x25 chars monochrome)
 	int      0x10                               ; set video mode via interrupt
 
-; reboot by jumping to reset vector
-	jmp      0xffff:0x0000                      ; jump to reset vector
+; load stage2 from disk into memory
+	mov      si,       dap                      ; point si at dap (pre-initialized with source and destination addresses for stage2 load)
+	mov      dl,       0x80                     ; select disk 0x80 (primary HDD) for disk access
+	mov      ah,       0x42                     ; select LBA read mode for disk access
+	int      0x13                               ; perform disk access via interrupt
+	jc       halt                               ; on error jump to halt
+
+	jmp      stage2                             ; pass control to stage2 code
+
+; halts execution
+halt:
+	hlt                                         ; halt CPU
+	jmp      halt                               ; keep halting if interrupted
+
+; disk address packet
+dap:
+	db 0x10                                     ; size of struct = 16
+	db 0x00                                     ; unused
+	dw stage2.sectors                           ; number of sectors to read
+	dw stage2                                   ; memory offset within segment
+	dw 0x0000                                   ; memory segment
+	dd stage2.lba                               ; low bytes of LBA address of data on disk
+	dd 0x00000000                               ; high bytes of LBA address (unused by us)
 
 ; assert that we have not over-run the maximum size of an MBR bootloader
 %if ($-$$) > mbr.size
