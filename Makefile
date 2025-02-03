@@ -1,6 +1,6 @@
 MAKEFLAGS += --no-builtin-rules
 .SILENT:
-.PHONY: all clean test
+.PHONY: all clean distclean test
 
 CC := gcc
 CC_X86 := x86_64-linux-gnu-gcc
@@ -19,9 +19,12 @@ OBJDUMP_X86 := x86_64-linux-gnu-objdump
 
 OBJDUMP_FLAGS_M16 := -m i8086 -M intel
 
-all: disk bootloader_emu
+all: disk bootloader_emu kernel
 
 clean:
+	git clean -e '!kernel' -e '!kernel.tar.xz' -fX
+
+distclean:
 	git clean -fX
 
 test: disk
@@ -44,6 +47,14 @@ disk: mbr.bin bootloader.bin
 	./make_disk.sh '$@' $^
 
 bootloader.elf: main.m16.o bios_services.m16.o
+
+kernel.tar.xz:
+	echo 'downloading kernel sources'
+	curl -sSLf 'https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.13.1.tar.xz' > '$@'
+
+kernel: build_kernel.sh kernel.tar.xz
+	echo 'building kernel'
+	./$^
 
 %.bin: %.asm
 	echo 'assembling $< -> $@'

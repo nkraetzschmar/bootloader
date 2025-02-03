@@ -4,4 +4,6 @@
 bootloader_emu
 dependencies.make
 disk
+kernel
+kernel.tar.xz
 serial.log
