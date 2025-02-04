@@ -30,7 +30,7 @@ distclean:
 test: disk
 	echo 'running $< in qemu'
 	./run.sh '$<' | tee serial.log
-	grep -F 'Kernel panic - not syncing: No working init found.' < serial.log > /dev/null
+	grep -F 'hello from the initrd' < serial.log > /dev/null
 
 debug: disk bootloader.elf
 	echo 'running $< in qemu in debug mode'
@@ -41,14 +41,16 @@ emu_test: bootloader_emu disk
 	BOOTLOADER_EMU_DEBUG=1 ./$^
 
 dependencies.make: *.c
-	$(CC) -MM $^ | sed '/\.o:/{p;s/\.o/.m16.o/}' > '$@'
+	$(CC) -DNO_INC_GEN=1 -MM $^ | sed '/\.o:/{p;s/\.o/.m16.o/}' > '$@'
 
 include dependencies.make
 
 bootloader_emu: main.o lib.o linux.o bios_services_emu.o
+	echo 'linking $^ -> $@'
 	$(CC) -o '$@' $^
 
-disk: mbr.bin bootloader.bin kernel
+disk: mbr.bin bootloader.bin kernel initrd.cpio
+	echo 'creating $@'
 	./make_disk.sh '$@' $^
 
 bootloader.elf: main.m16.o lib.m16.o linux.m16.o bios_services.m16.o
@@ -60,6 +62,20 @@ kernel.tar.xz:
 kernel: build_kernel.sh kernel.tar.xz
 	echo 'building kernel'
 	./$^
+
+hello: hello.c
+	echo 'compiling $^ -> $@'
+	$(CC_X86) $(CFLAGS) -static -o '$@' $^
+
+initrd.cpio: hello
+	echo 'building $@'
+	echo $< | cpio -o -H newc > '$@'
+
+initrd.h: initrd.cpio
+	echo "#define INITRD_SIZE $$(du -b '$<' | cut -f 1)" > '$@'
+
+linux.o: initrd.h
+linux.m16.o: initrd.h
 
 %.bin: %.asm
 	echo 'assembling $< -> $@'

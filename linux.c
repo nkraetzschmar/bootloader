@@ -1,6 +1,9 @@
 #include "types.h"
 #include "bios_services.h"
 #include "lib.h"
+#ifndef NO_INC_GEN
+#include "initrd.h"
+#endif
 
 struct setup_header {
 	uint8  setup_sects;
@@ -52,8 +55,13 @@ uint8 io_buf[0x8000];
 
 struct setup_header *setup_header = (void *) (real_mode_kernel_code + 0x01f1);
 uint8 *prot_mode_kernel = (void *) 0x00100000;
+uint8 *initrd = (void *) 0x04000000;
 
 const uint32 kernel_lba = 0x0800; // hardcoded for now, should be file based later
+const uint32 initrd_lba = 0x8000;
+const uint32 initrd_size = INITRD_SIZE;
+
+const char cmdline[] = "init=/hello";
 
 int16 load_kernel()
 {
@@ -61,6 +69,7 @@ int16 load_kernel()
 	uint8 real_mode_sectors;
 	uint32 prot_mode_size;
 	uint32 prot_mode_sectors;
+	uint32 initrd_sectors;
 	uint16 read_sectors;
 	uint8 *ptr;
 	const char *kernel_uname;
@@ -94,9 +103,33 @@ int16 load_kernel()
 		ptr += read_sectors * 0x0200;
 	}
 
+	reset_seek();
+	seek(initrd_lba);
+
+	initrd_sectors = (initrd_size + 0x01ff) / 0x0200;
+	ptr = initrd;
+
+	while (initrd_sectors) {
+		read_sectors = initrd_sectors > 0x40 ? 0x40 : initrd_sectors;
+
+		error = read(io_buf, read_sectors);
+		if (error != 0) return error;
+
+		error = mem_move(ptr, io_buf, read_sectors * 0x0200);
+		if (error != 0) return error;
+
+		initrd_sectors -= read_sectors;
+		ptr += read_sectors * 0x0200;
+	}
+
+	for (uint16 i = 0; i < sizeof(cmdline); ++i) kernel_cmdline[i] = cmdline[i];
+
 	setup_header->type_of_loader = 0xff;
 	setup_header->loadflags |= 0x80;
 	setup_header->heap_end_ptr = 0xee00;
+	setup_header->ramdisk_image = (uint32) (unsigned long) initrd;
+	setup_header->ramdisk_size = initrd_size;
+	setup_header->cmd_line_ptr = (uint32) (unsigned long) kernel_cmdline;
 
 	return 0;
 }

@@ -14,9 +14,10 @@ struct disk_address_packet {
 struct global_descriptor_table {
 	uint16 limit;
 	uint16 base_low;
-	uint8 base_high;
+	uint8 base_mid;
 	uint8 access_mode;
-	uint16 reserved;
+	uint8 flags;
+	uint8 base_high;
 };
 
 static_assert(sizeof(struct disk_address_packet) == 0x10);
@@ -77,20 +78,20 @@ int16 mem_move(uint8 *dst, const uint8 *src, uint32 len)
 	int8 error;
 	int16 words;
 
-	if ((uint32) dst > 0x00ffffff || (uint32) src > 0x00ffffff) return -1;
-
 	for (uint16 i = 0; i < sizeof(global_descriptor_table); ++i) {
 		((uint8 *) global_descriptor_table)[i] = 0x00;
 	}
 
 	global_descriptor_table[2].limit = 0x7fff;
 	global_descriptor_table[2].base_low = ((uint32) src) & 0x0000ffff;
-	global_descriptor_table[2].base_high = (((uint32) src) & 0x00ff0000) >> 0x10;
+	global_descriptor_table[2].base_mid = (((uint32) src) & 0x00ff0000) >> 0x10;
+	global_descriptor_table[2].base_high = (((uint32) src) & 0xff000000) >> 0x18;
 	global_descriptor_table[2].access_mode = 0x93;
 
 	global_descriptor_table[3].limit = 0x7fff;
 	global_descriptor_table[3].base_low = ((uint32) dst) & 0x0000ffff;
-	global_descriptor_table[3].base_high = (((uint32) dst) & 0x00ff0000) >> 0x10;
+	global_descriptor_table[3].base_mid = (((uint32) dst) & 0x00ff0000) >> 0x10;
+	global_descriptor_table[3].base_high = (((uint32) dst) & 0xff000000) >> 0x18;
 	global_descriptor_table[3].access_mode = 0x93;
 
 	words = len >> 1;

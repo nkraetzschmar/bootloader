@@ -5,7 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/**"
             ],
-            "defines": [ "constexpr=const", "static_assert(X)=" ],
+            "defines": [ "constexpr=const", "static_assert(X)=", "NO_INC_GEN=", "INITRD_SIZE=0" ],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c17",
             "intelliSenseMode": "linux-gcc-x64"
