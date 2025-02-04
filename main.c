@@ -17,5 +17,5 @@ void init()
 	}
 
 	flush();
-	reset();
+	exec_kernel();
 }

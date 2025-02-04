@@ -87,3 +87,15 @@ int16 disk_read(uint8 *buffer, uint16 sectors, uint32 lba)
 
 	return 0;
 }
+
+int16 mem_move(uint8 *dst, const uint8 *src, uint32 len)
+{
+	debug_printf("dst=0x%08lx, src=0x%08lx, len=%u)", (size_t) dst, (size_t) src, len);
+	return 0;
+}
+
+void exec_kernel()
+{
+	debug_printf();
+	exit(0);
+}

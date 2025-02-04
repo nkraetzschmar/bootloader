@@ -29,11 +29,12 @@ distclean:
 
 test: disk
 	echo 'running $< in qemu'
-	./run.sh '$<'
+	./run.sh '$<' | tee serial.log
+	grep -F 'Kernel panic - not syncing: No working init found.' < serial.log > /dev/null
 
-debug: disk
+debug: disk bootloader.elf
 	echo 'running $< in qemu in debug mode'
-	./debug.sh '$<'
+	./debug.sh $^
 
 emu_test: bootloader_emu disk
 	echo 'running $<'

@@ -26,4 +26,4 @@ sed_pid="$!"
 sleep 1
 kill -0 "$qemu_pid" 2> /dev/null || { cat serial.log; exit 1; }
 
-gdb-multiarch -x real-mode.gdbinit
+gdb-multiarch -x real-mode.gdbinit "$2"

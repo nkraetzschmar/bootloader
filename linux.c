@@ -1,4 +1,5 @@
 #include "types.h"
+#include "bios_services.h"
 #include "lib.h"
 
 struct setup_header {
@@ -50,26 +51,52 @@ uint8 kernel_cmdline[0x0800];
 uint8 io_buf[0x8000];
 
 struct setup_header *setup_header = (void *) (real_mode_kernel_code + 0x01f1);
+uint8 *prot_mode_kernel = (void *) 0x00100000;
 
 const uint32 kernel_lba = 0x0800; // hardcoded for now, should be file based later
 
 int16 load_kernel()
 {
 	int16 error;
-	uint8 sectors;
+	uint8 real_mode_sectors;
+	uint32 prot_mode_size;
+	uint32 prot_mode_sectors;
+	uint16 read_sectors;
+	uint8 *ptr;
 	const char *kernel_uname;
 
 	seek(kernel_lba);
 	error = read(real_mode_kernel_code, 2);
 	if (error != 0) return error;
 
-	sectors = setup_header->setup_sects;
-	error = read(real_mode_kernel_code + 0x0400, sectors - 2);
+	real_mode_sectors = setup_header->setup_sects;
+	error = read(real_mode_kernel_code + 0x0400, real_mode_sectors - 1);
 	if (error != 0) return error;
 
 	kernel_uname = (char *) real_mode_kernel_code + setup_header->kernel_version + 0x0200;
 	print_str(kernel_uname);
 	print_str("\r\n");
+
+	prot_mode_size = setup_header->syssize * 0x10;
+	prot_mode_sectors = (prot_mode_size + 0x1ff) / 0x200;
+	ptr = prot_mode_kernel;
+
+	while (prot_mode_sectors) {
+		read_sectors = prot_mode_sectors > 0x40 ? 0x40 : prot_mode_sectors;
+
+		error = read(io_buf, read_sectors);
+		if (error != 0) return error;
+
+		error = mem_move(ptr, io_buf, read_sectors * 0x0200);
+		if (error != 0) return error;
+
+		prot_mode_sectors -= read_sectors;
+		ptr += read_sectors * 0x0200;
+	}
+
+	setup_header->type_of_loader = 0xff;
+	setup_header->loadflags |= 0x80;
+	setup_header->heap_end_ptr = 0xee00;
 
 	return 0;
 }
