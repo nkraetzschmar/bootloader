@@ -4,6 +4,9 @@
 bootloader_emu
 dependencies.make
 disk
+hello
+initrd.cpio
+initrd.h
 kernel
 kernel.tar.xz
 serial.log
