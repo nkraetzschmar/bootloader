@@ -1,19 +1,16 @@
 #include "types.h"
 #include "bios_services.h"
+#include "lib.h"
 
-void flush()
-{
-	print_char(0x00);
-}
-
-void print_str(const char *str)
-{
-	for (const char *ptr = str; *ptr; ++ptr) print_char(*ptr);
-}
+uint8 buf[0x0200];
 
 void init()
 {
-	print_str("hello\r\n");
+	print_str("hello ");
+	seek(2048);
+	read(buf, 1);
+	print_str((char *) buf);
+	print_str("\r\n");
 	flush();
 	reset();
 }

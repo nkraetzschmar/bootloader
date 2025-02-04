@@ -34,19 +34,21 @@ Therefore in most common disk setups it should be perfectly fine to use this spa
 ```
 === low mem ===
 
-        ? - 0x0007c00 stack (grows down dynamically)
-0x0007c00 - 0x0007dbe MBR (stage 1)
+         ? - 0x00007c00 stack (grows down dynamically)
+0x00007c00 - 0x00007dbe MBR (stage 1)
 
-0x0008000 - 0x000c000 bootloader (stage 2)
+0x00008000 - 0x0000c000 bootloader (stage 2)
 
-0x0010000 - 0x0018000 real mode kernel code
-0x0018000 - 0x001f000 real mode kernel heap
-0x001f000 - 0x001f800 kernel cmdline
+0x00010000 - 0x00018000 real mode kernel code
+0x00018000 - 0x0001f000 real mode kernel heap
+0x0001f000 - 0x0001f800 kernel cmdline
+
+0x00040000 - 0x00048000 disk read buffer (for loading protected mode kernel code and initrd)
 
 === high mem ===
 
-0x0100000 - ?         protected mode kernel code
-0x4000000 - ?         initrd
+0x00100000 - ?          protected mode kernel code
+0x04000000 - ?          initrd
 ```
 
 ## Bootloader Emulator

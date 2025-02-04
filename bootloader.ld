@@ -2,8 +2,10 @@ OUTPUT_FORMAT("elf32-i386")
 ENTRY(init)
 
 MEMORY {
-	TEXT (rx) : ORIGIN = 0x8000, LENGTH = 0x3000
-	DATA (rw) : ORIGIN = 0xb000, LENGTH = 0x1000
+	TEXT   (rx) : ORIGIN = 0x00008000, LENGTH = 0x3000
+	DATA   (rw) : ORIGIN = 0x0000b000, LENGTH = 0x1000
+	KERNEL (rw) : ORIGIN = 0x00010000, LENGTH = 0xf800
+	HEAP   (rw) : ORIGIN = 0x00040000, LENGTH = 0x8000
 }
 
 SECTIONS {
@@ -12,6 +14,16 @@ SECTIONS {
 		*(.text.*)
 		*(.text)
 	} > TEXT
+
+	.kernel : {
+		*(.bss.real_mode_kernel_code)
+		*(.bss.real_mode_kernel_heap)
+		*(.bss.kernel_cmdline)
+	} > KERNEL
+
+	.heap : {
+		*(.bss.io_buf)
+	} > HEAP
 
 	.data : {
 		*(.rodata.*)

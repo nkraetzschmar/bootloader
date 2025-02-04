@@ -40,13 +40,13 @@ dependencies.make: *.c
 
 include dependencies.make
 
-bootloader_emu: main.o bios_services_emu.o
+bootloader_emu: main.o lib.o bios_services_emu.o
 	$(CC) -o '$@' $^
 
 disk: mbr.bin bootloader.bin
 	./make_disk.sh '$@' $^
 
-bootloader.elf: main.m16.o bios_services.m16.o
+bootloader.elf: main.m16.o lib.m16.o bios_services.m16.o
 
 kernel.tar.xz:
 	echo 'downloading kernel sources'
@@ -74,6 +74,7 @@ kernel: build_kernel.sh kernel.tar.xz
 %.elf: %.ld
 	echo 'linking $^ -> $@'
 	$(LD_X86) $(LDFLAGS_M16) -o '$@' -T $^
+	$(OBJDUMP_X86) $(OBJDUMP_FLAGS_M16) -h -d '$@'
 
 %.bin: %.elf
 	echo 'writing $< -> $@'
