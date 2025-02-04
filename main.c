@@ -1,19 +1,21 @@
 #include "types.h"
 #include "bios_services.h"
+#include "lib.h"
+#include "linux.h"
 
-void flush()
-{
-	print_char(0x00);
-}
-
-void print_str(const char *str)
-{
-	for (const char *ptr = str; *ptr; ++ptr) print_char(*ptr);
-}
+uint8 buf[0x0200];
 
 void init()
 {
-	print_str("hello\r\n");
+	uint16 error;
+
+	error = load_kernel();
+	if (error != 0) {
+		print_str("failed to load kernel\r\n");
+		flush();
+		halt();
+	}
+
 	flush();
-	reset();
+	exec_kernel();
 }

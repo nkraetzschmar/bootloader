@@ -2,11 +2,18 @@ FROM debian:testing
 RUN apt-get update \
 && apt-get install --no-install-recommends -y \
 	$([ "$(dpkg --print-architecture)" != amd64 ] && echo crossbuild-essential-amd64 || echo) \
+	bc \
+	bison \
 	bsdextrautils \
 	build-essential \
+	ca-certificates \
+	curl \
 	fdisk \
+	flex \
 	gdb-multiarch \
 	git \
+	libelf-dev \
 	nasm \
 	qemu-system-x86 \
+	xz-utils \
 	;
