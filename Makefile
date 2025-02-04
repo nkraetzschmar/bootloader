@@ -35,18 +35,22 @@ debug: disk
 	echo 'running $< in qemu in debug mode'
 	./debug.sh '$<'
 
+emu_test: bootloader_emu disk
+	echo 'running $<'
+	BOOTLOADER_EMU_DEBUG=1 ./$^
+
 dependencies.make: *.c
 	$(CC) -MM $^ | sed '/\.o:/{p;s/\.o/.m16.o/}' > '$@'
 
 include dependencies.make
 
-bootloader_emu: main.o lib.o bios_services_emu.o
+bootloader_emu: main.o lib.o linux.o bios_services_emu.o
 	$(CC) -o '$@' $^
 
-disk: mbr.bin bootloader.bin
+disk: mbr.bin bootloader.bin kernel
 	./make_disk.sh '$@' $^
 
-bootloader.elf: main.m16.o lib.m16.o bios_services.m16.o
+bootloader.elf: main.m16.o lib.m16.o linux.m16.o bios_services.m16.o
 
 kernel.tar.xz:
 	echo 'downloading kernel sources'

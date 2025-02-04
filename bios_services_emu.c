@@ -52,7 +52,6 @@ void reset()
 
 void print_char(char c)
 {
-	debug_printf("c=0x%02x", c);
 	if (c != 0) fputc(c, stdout);
 	else fflush(stdout);
 }
