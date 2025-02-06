@@ -78,28 +78,8 @@ static int16 check_header(struct gpt_header *gpt_header)
 
 static const uint8 esp_type[0x0010] = { 0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11, 0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b };
 
-static uint32 get_esp_lba(struct gpt_entry *entries, uint16 num_entries)
-{
-	for (uint16 i = 0; i < num_entries; ++i) {
-		if (memeq(&entries[i].type, esp_type, 0x0010)) {
-			if (entries[i].start.low >= 0x80000000 || entries[i].start.high != 0x00000000) {
-				print_str("ESP partition start out of range\r\n");
-				return 0;
-			}
-
-			print_str("Found ESP partition: ");
-			print_guid((uint8 *) &entries[i].guid);
-			print_str("\r\n");
-
-			return entries[i].start.low;
-		}
-	}
-
-	print_str("No ESP partition found\r\n");
-	return 0;
-}
-
-static uint32 esp_lba;
+static uint32 esp_start = 0;
+static uint32 esp_end;
 
 int16 find_esp()
 {
@@ -116,21 +96,53 @@ int16 find_esp()
 	error = check_header(header);
 	if (error != 0) return error;
 
-	esp_lba = get_esp_lba(entries, header->num_entries);
-	if (!esp_lba) return -1;
+	for (uint16 i = 0; i < header->num_entries; ++i) {
+		if (memeq(&entries[i].type, esp_type, 0x0010)) {
+			if (entries[i].start.high != 0x0000 || entries[i].end.high != 0x0000) {
+				print_str("ESP partition out of range\r\n");
+				return -1;
+			}
+
+			esp_start = entries[i].start.low;
+			esp_end = entries[i].end.low;
+
+			if (esp_end < esp_start) {
+				print_str("Invalid partition\r\n");
+				return -1;
+			}
+
+			print_str("Found ESP partition: ");
+			print_guid((uint8 *) &entries[i].guid);
+			print_str("\r\n");
+		}
+	}
+
+	if (esp_start == 0) {
+		print_str("No ESP partition found\r\n");
+		return 0;
+	}
 
 	print_str("Using ESP partiton @");
-	print_hex_be((uint8 *) &esp_lba, 0x0004);
+	print_hex_le((uint8 *) &esp_start, 0x0004);
 	print_str("\r\n");
 
 	return 0;
 }
 
-int16 esp_read(uint8 *buffer, uint16 sectors, uint32 lba)
+int16 esp_read(uint8 *buffer, uint16 sectors, uint32 sector)
 {
-	if (!esp_lba) {
+	uint32 lba;
+
+	if (!esp_start) {
 		print_str("No partition loaded yet\r\n");
 		return -1;
 	}
-	return disk_read(buffer, sectors, esp_lba + lba);
+
+	lba = esp_start + sector;
+	if (lba > esp_end) {
+		print_str("Sector beyond partition end\r\n");
+		return -1;
+	}
+
+	return disk_read(buffer, sectors, lba);
 }

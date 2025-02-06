@@ -2,6 +2,7 @@
 #include "bios_services.h"
 #include "lib.h"
 #include "gpt.h"
+#include "fat32.h"
 #include "linux.h"
 
 void init()
@@ -15,13 +16,21 @@ void init()
 		halt();
 	}
 
-	error = load_kernel();
+	error = load_fat32();
 	if (error != 0) {
-		print_str("failed to load kernel\r\n");
+		print_str("failed to load FAT32 file system\r\n");
 		flush();
 		halt();
 	}
 
+	// error = load_kernel();
+	// if (error != 0) {
+	// 	print_str("failed to load kernel\r\n");
+	// 	flush();
+	// 	halt();
+	// }
+
 	flush();
-	exec_kernel();
+	reset();
+	// exec_kernel();
 }

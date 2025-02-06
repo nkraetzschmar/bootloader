@@ -32,8 +32,8 @@ test: disk
 	./run.sh '$<' | tee serial.log
 	grep -xF 'Found GPT disk: 01234567-ABCD-0123-ABCD-0123456789AB' < serial.log > /dev/null
 	grep -xF 'Found ESP partition: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE' < serial.log > /dev/null
-	grep -xF 'Using ESP partiton @00080000' < serial.log > /dev/null
-	grep -F 'hello from the initrd' < serial.log > /dev/null
+	grep -xF 'Using ESP partiton @00000800' < serial.log > /dev/null
+	# grep -F 'hello from the initrd' < serial.log > /dev/null
 
 debug: disk bootloader.elf
 	echo 'running $< in qemu in debug mode'
@@ -48,15 +48,15 @@ dependencies.make: *.c
 
 include dependencies.make
 
-bootloader_emu: main.o io_buf.o lib.o gpt.o linux.o bios_services_emu.o
+bootloader_emu: main.o io_buf.o lib.o gpt.o fat32.o linux.o bios_services_emu.o
 	echo 'linking $^ -> $@'
 	$(CC) -o '$@' $^
 
-disk: mbr.bin bootloader.bin kernel initrd.cpio
+disk: make_disk.sh mbr.bin bootloader.bin kernel initrd.cpio
 	echo 'creating $@'
-	./make_disk.sh '$@' $^
+	./$^ $@
 
-bootloader.elf: main.m16.o io_buf.m16.o lib.m16.o gpt.m16.o linux.m16.o bios_services.m16.o
+bootloader.elf: main.m16.o io_buf.m16.o lib.m16.o gpt.m16.o fat32.m16.o linux.m16.o bios_services.m16.o
 
 kernel.tar.xz:
 	echo 'downloading kernel sources'

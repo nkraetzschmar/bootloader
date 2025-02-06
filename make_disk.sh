@@ -2,11 +2,11 @@
 
 set -eufo pipefail
 
-disk="$1"
-mbr="$2"
-stage2="$3"
-kernel="$4"
-initrd="$5"
+mbr="$1"; shift
+stage2="$1"; shift
+kernel="$1"; shift
+initrd="$1"; shift
+disk="$1"; shift
 
 truncate -s 0 "$disk"
 truncate -s 1G "$disk"
@@ -18,5 +18,10 @@ EOF
 
 dd if="$mbr" of="$disk" bs=446 count=1 conv=notrunc 2> /dev/null
 dd if="$stage2" of="$disk" bs=512 count=32 seek=34 conv=notrunc 2> /dev/null
-dd if="$kernel" of="$disk" bs=512 seek=2048 conv=notrunc 2> /dev/null
-dd if="$initrd" of="$disk" bs=512 seek=34816 conv=notrunc 2> /dev/null
+
+mformat -i "$disk@@2048s" -T 1048576 -c 2 -F -v EFI ::
+echo hello | mcopy -i "$disk@@2048s" - ::/test
+mdir -i "$disk@@2048s" -/ ::
+
+# dd if="$kernel" of="$disk" bs=512 seek=2048 conv=notrunc 2> /dev/null
+# dd if="$initrd" of="$disk" bs=512 seek=34816 conv=notrunc 2> /dev/null
