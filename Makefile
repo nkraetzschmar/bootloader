@@ -30,9 +30,9 @@ distclean:
 test: disk
 	echo 'running $< in qemu'
 	./run.sh '$<' | tee serial.log
-	grep -F '01234567-ABCD-0123-ABCD-0123456789AB' < serial.log > /dev/null
-	grep -F 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE' < serial.log > /dev/null
-	grep -F 'ESP partiton @00080000' < serial.log > /dev/null
+	grep -xF 'Found GPT disk: 01234567-ABCD-0123-ABCD-0123456789AB' < serial.log > /dev/null
+	grep -xF 'Found ESP partition: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE' < serial.log > /dev/null
+	grep -xF 'Using ESP partiton @00080000' < serial.log > /dev/null
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 
 debug: disk bootloader.elf

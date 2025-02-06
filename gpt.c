@@ -34,34 +34,6 @@ struct gpt_entry {
 
 static_assert(sizeof(struct gpt_entry) == 0x0080);
 
-static const char *hex_map = "0123456789ABCDEF";
-
-static void print_hex(const uint8 *buf, uint16 len, int8 step)
-{
-	uint8 value;
-	uint8 low_bits;
-	uint8 high_bits;
-
-	for (int16 i = 0; i < len; ++i) {
-		value = *(buf + (i * step));
-		low_bits  = value & 0x0f;
-		high_bits = (value >> 4) & 0x0f;
-
-		print_char(hex_map[high_bits]);
-		print_char(hex_map[low_bits]);
-	}
-}
-
-static void print_hex_be(const uint8 *buf, uint16 len)
-{
-	print_hex(buf, len, 1);
-}
-
-static void print_hex_le(const uint8 *buf, uint16 len)
-{
-	print_hex(buf + len - 1, len, -1);
-}
-
 static void print_guid(uint8 *guid)
 {
 	print_hex_le(guid + 0x00, 0x04);
@@ -77,11 +49,27 @@ static void print_guid(uint8 *guid)
 
 static int16 check_header(struct gpt_header *gpt_header)
 {
-	if (!memeq(gpt_header->signature, "EFI PART", 0x0008)) return -1;
-	if (gpt_header->entries_lba.low != 0x00000002 || gpt_header->entries_lba.high != 0x00000000) return -1;
-	if (gpt_header->num_entries > 0x00000080) return -1;
-	if (gpt_header->entry_size != 0x00000080) return -1;
+	if (!memeq(gpt_header->signature, "EFI PART", 0x0008)) {
+		print_str("Not a GPT partitioned disk\r\n");
+		return -1;
+	}
 
+	if (gpt_header->entries_lba.low != 0x00000002 || gpt_header->entries_lba.high != 0x00000000) {
+		print_str("Unsupported GPT config: entries not at LBA 2\r\n");
+		return -1;
+	}
+
+	if (gpt_header->num_entries > 0x00000080) {
+		print_str("Unsupported GPT config: too many entries\r\n");
+		return -1;
+	}
+
+	if (gpt_header->entry_size != 0x00000080) {
+		print_str("Unsupported GPT config: non standard entry size\r\n");
+		return -1;
+	}
+
+	print_str("Found GPT disk: ");
 	print_guid((uint8 *) &gpt_header->guid);
 	print_str("\r\n");
 
@@ -94,8 +82,12 @@ static uint32 get_esp_lba(struct gpt_entry *entries, uint16 num_entries)
 {
 	for (uint16 i = 0; i < num_entries; ++i) {
 		if (memeq(&entries[i].type, esp_type, 0x0010)) {
-			if (entries[i].start.low >= 0x80000000 || entries[i].start.high != 0x00000000) return 0;
+			if (entries[i].start.low >= 0x80000000 || entries[i].start.high != 0x00000000) {
+				print_str("ESP partition start out of range\r\n");
+				return 0;
+			}
 
+			print_str("Found ESP partition: ");
 			print_guid((uint8 *) &entries[i].guid);
 			print_str("\r\n");
 
@@ -103,6 +95,7 @@ static uint32 get_esp_lba(struct gpt_entry *entries, uint16 num_entries)
 		}
 	}
 
+	print_str("No ESP partition found\r\n");
 	return 0;
 }
 
@@ -126,7 +119,7 @@ int16 find_esp()
 	esp_lba = get_esp_lba(entries, header->num_entries);
 	if (!esp_lba) return -1;
 
-	print_str("ESP partiton @");
+	print_str("Using ESP partiton @");
 	print_hex_be((uint8 *) &esp_lba, 0x0004);
 	print_str("\r\n");
 
@@ -135,6 +128,9 @@ int16 find_esp()
 
 int16 esp_read(uint8 *buffer, uint16 sectors, uint32 lba)
 {
-	if (!esp_lba) return -1;
+	if (!esp_lba) {
+		print_str("No partition loaded yet\r\n");
+		return -1;
+	}
 	return disk_read(buffer, sectors, esp_lba + lba);
 }

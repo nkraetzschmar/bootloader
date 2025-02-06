@@ -6,3 +6,5 @@ void seek(uint32 sectors);
 int16 read(uint8 *buffer, uint16 sectors);
 
 uint8 memeq(const void *a, const void *b, uint16 len);
+void print_hex_be(const uint8 *buf, uint16 len);
+void print_hex_le(const uint8 *buf, uint16 len);
