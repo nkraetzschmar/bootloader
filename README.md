@@ -43,7 +43,7 @@ Therefore in most common disk setups it should be perfectly fine to use this spa
 0x00018000 - 0x0001f000 real mode kernel heap
 0x0001f000 - 0x0001f800 kernel cmdline
 
-0x00040000 - 0x00048000 disk read buffer (for loading protected mode kernel code and initrd)
+0x00040000 - 0x00048000 I/O buffer
 
 === high mem ===
 
