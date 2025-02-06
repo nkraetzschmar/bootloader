@@ -10,7 +10,7 @@ void init()
 
 	error = find_esp();
 	if (error != 0) {
-		print_str("failed to load GPT\r\n");
+		print_str("failed to load ESP\r\n");
 		flush();
 		halt();
 	}

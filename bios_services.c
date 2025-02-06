@@ -1,5 +1,6 @@
 #include "types.h"
 #include "bios_services.h"
+#include "lib.h"
 
 struct disk_address_packet {
 	uint8 size;
@@ -67,15 +68,22 @@ int16 disk_read(uint8 *buffer, uint16 sectors, uint32 lba)
 	                       : "a" (0x4200), "d" (0x0080), "S" (&disk_address_packet)
 	                       : );
 
-	return result ? -error : 0;
+	if (result != 0) {
+		print_str("disk read failed with ERR ");
+		print_hex_be(&error, 0x0001);
+		print_str("\r\n");
+		return -1;
+	}
+
+	return 0;
 }
 
 int16 mem_move(uint8 *dst, const uint8 *src, uint32 len)
 {
 	static struct global_descriptor_table global_descriptor_table[6];
 
-	int8 result;
-	int8 error;
+	uint8 result;
+	uint8 error;
 	int16 words;
 
 	for (uint16 i = 0; i < sizeof(global_descriptor_table); ++i) {
@@ -101,7 +109,14 @@ int16 mem_move(uint8 *dst, const uint8 *src, uint32 len)
 	                       : "a" (0x8700), "c" (words), "S" (global_descriptor_table)
 	                       : );
 
-	return result ? -error : 0;
+	if (result != 0) {
+		print_str("memory block move failed with ERR ");
+		print_hex_be(&error, 0x0001);
+		print_str("\r\n");
+		return -1;
+	}
+
+	return 0;
 }
 
 void exec_kernel()
