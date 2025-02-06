@@ -1,6 +1,7 @@
 #include "types.h"
 #include "lib.h"
 #include "bios_services.h"
+#include "gpt.h"
 
 static uint32 current_sector = 0;
 
@@ -28,9 +29,15 @@ int16 read(uint8 *buffer, uint16 sectors)
 {
 	uint16 error;
 
-	error = disk_read(buffer, sectors, current_sector);
+	error = esp_read(buffer, sectors, current_sector);
 	if (error != 0) return error;
 
 	current_sector += sectors;
 	return 0;
+}
+
+uint8 memeq(const void *a, const void *b, uint16 len)
+{
+	for (uint16 i = 0; i < len; ++i) if (((uint8 *) a)[i] != ((uint8 *) b)[i]) return 0;
+	return 1;
 }

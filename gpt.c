@@ -1,0 +1,140 @@
+#include "types.h"
+#include "gpt.h"
+#include "bios_services.h"
+#include "lib.h"
+#include "io_buf.h"
+
+struct gpt_header {
+	uint8  signature[0x0008];
+	uint16 revision[0x0002];
+	uint32 header_size;
+	uint32 header_crc32;
+	uint32 reserved;
+	uint64 header_lba;
+	uint64 backup_lba;
+	uint64 first_block;
+	uint64 last_block;
+	uint8  guid[0x0010];
+	uint64 entries_lba;
+	uint32 num_entries;
+	uint32 entry_size;
+	uint32 entries_crc32;
+};
+
+static_assert(sizeof(struct gpt_header) == 0x005c);
+
+struct gpt_entry {
+	uint8  type[0x0010];
+	uint8  guid[0x0010];
+	uint64 start;
+	uint64 end;
+	uint64 attributes;
+	uint16 partition_name[0x0024];
+};
+
+static_assert(sizeof(struct gpt_entry) == 0x0080);
+
+static const char *hex_map = "0123456789ABCDEF";
+
+static void print_hex(const uint8 *buf, uint16 len, int8 step)
+{
+	uint8 value;
+	uint8 low_bits;
+	uint8 high_bits;
+
+	for (int16 i = 0; i < len; ++i) {
+		value = *(buf + (i * step));
+		low_bits  = value & 0x0f;
+		high_bits = (value >> 4) & 0x0f;
+
+		print_char(hex_map[high_bits]);
+		print_char(hex_map[low_bits]);
+	}
+}
+
+static void print_hex_be(const uint8 *buf, uint16 len)
+{
+	print_hex(buf, len, 1);
+}
+
+static void print_hex_le(const uint8 *buf, uint16 len)
+{
+	print_hex(buf + len - 1, len, -1);
+}
+
+static void print_guid(uint8 *guid)
+{
+	print_hex_le(guid + 0x00, 0x04);
+	print_char('-');
+	print_hex_le(guid + 0x04, 0x02);
+	print_char('-');
+	print_hex_le(guid + 0x06, 0x02);
+	print_char('-');
+	print_hex_be(guid + 0x08, 0x02);
+	print_char('-');
+	print_hex_be(guid + 0x0a, 0x06);
+}
+
+static int16 check_header(struct gpt_header *gpt_header)
+{
+	if (!memeq(gpt_header->signature, "EFI PART", 0x0008)) return -1;
+	if (gpt_header->entries_lba.low != 0x00000002 || gpt_header->entries_lba.high != 0x00000000) return -1;
+	if (gpt_header->num_entries > 0x00000080) return -1;
+	if (gpt_header->entry_size != 0x00000080) return -1;
+
+	print_guid((uint8 *) &gpt_header->guid);
+	print_str("\r\n");
+
+	return 0;
+}
+
+static const uint8 esp_type[0x0010] = { 0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11, 0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b };
+
+static uint32 get_esp_lba(struct gpt_entry *entries, uint16 num_entries)
+{
+	for (uint16 i = 0; i < num_entries; ++i) {
+		if (memeq(&entries[i].type, esp_type, 0x0010)) {
+			if (entries[i].start.low >= 0x80000000 || entries[i].start.high != 0x00000000) return 0;
+
+			print_guid((uint8 *) &entries[i].guid);
+			print_str("\r\n");
+
+			return entries[i].start.low;
+		}
+	}
+
+	return 0;
+}
+
+static uint32 esp_lba;
+
+int16 find_esp()
+{
+	int16 error;
+	struct gpt_header *header;
+	struct gpt_entry *entries;
+
+	error = disk_read(io_buf, 0x0020, 0x0001);
+	if (error != 0) return error;
+
+	header = (struct gpt_header *) io_buf;
+	entries = (struct gpt_entry *) (io_buf + 0x0200);
+
+	error = check_header(header);
+	if (error != 0) return error;
+
+	esp_lba = get_esp_lba(entries, header->num_entries);
+	if (!esp_lba) return -1;
+
+	print_str("ESP partiton @");
+	print_hex_be((uint8 *) &esp_lba, 0x0004);
+	print_str("\r\n");
+
+	return 0;
+}
+
+int16 esp_read(uint8 *buffer, uint16 sectors, uint32 lba)
+{
+	if (!esp_lba) return -1;
+	return disk_read(buffer, sectors, esp_lba + lba);
+}

@@ -22,7 +22,7 @@ SECTIONS {
 	} > KERNEL
 
 	.heap : {
-		*(.bss.io_buf)
+		*(.bss.heap)
 	} > HEAP
 
 	.data : {
