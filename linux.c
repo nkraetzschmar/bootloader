@@ -1,6 +1,7 @@
 #include "types.h"
 #include "bios_services.h"
 #include "lib.h"
+#include "fat32.h"
 #include "io_buf.h"
 #ifndef NO_INC_GEN
 #include "initrd.h"
@@ -99,10 +100,6 @@ struct setup_header *setup_header = (void *) (real_mode_kernel_code + 0x01f1);
 uint8 *prot_mode_kernel = (void *) 0x00100000;
 uint8 *initrd = (void *) 0x04000000;
 
-const uint32 kernel_lba = 0x0000; // hardcoded for now, should be file based later
-const uint32 initrd_lba = 0x8000;
-const uint32 initrd_size = INITRD_SIZE;
-
 const char cmdline[] = "init=/hello";
 
 int16 load_kernel()
@@ -111,18 +108,23 @@ int16 load_kernel()
 	uint8 real_mode_sectors;
 	uint32 prot_mode_size;
 	uint32 prot_mode_sectors;
+	uint32 initrd_size;
 	uint32 initrd_sectors;
-	uint16 read_sectors;
+	uint32 sectors_to_read;
+	uint32 sectors_read;
 	uint8 *ptr;
 	const char *kernel_uname;
 
-	seek(kernel_lba);
-	error = read(real_mode_kernel_code, 2);
+	error = open("KERNEL");
 	if (error != 0) return error;
 
+	sectors_read = read(real_mode_kernel_code, 0x00000002);
+	if (sectors_read != 0x00000002) return -1;
+
 	real_mode_sectors = setup_header->setup_sects;
-	error = read(real_mode_kernel_code + 0x0400, real_mode_sectors - 1);
-	if (error != 0) return error;
+	sectors_to_read = real_mode_sectors -1;
+	sectors_read = read(real_mode_kernel_code + 0x0400, sectors_to_read);
+	if (sectors_read != sectors_to_read) return -1;
 
 	kernel_uname = (char *) real_mode_kernel_code + setup_header->kernel_version + 0x0200;
 	print_str(kernel_uname);
@@ -133,35 +135,37 @@ int16 load_kernel()
 	ptr = prot_mode_kernel;
 
 	while (prot_mode_sectors) {
-		read_sectors = prot_mode_sectors > 0x40 ? 0x40 : prot_mode_sectors;
+		sectors_to_read = prot_mode_sectors > 0x80 ? 0x80 : prot_mode_sectors;
 
-		error = read(io_buf, read_sectors);
+		sectors_read = read(io_buf, sectors_to_read);
+		if (sectors_read != sectors_to_read) return -1;
+
+		error = mem_move(ptr, io_buf, sectors_to_read * 0x0200);
 		if (error != 0) return error;
 
-		error = mem_move(ptr, io_buf, read_sectors * 0x0200);
-		if (error != 0) return error;
-
-		prot_mode_sectors -= read_sectors;
-		ptr += read_sectors * 0x0200;
+		prot_mode_sectors -= sectors_to_read;
+		ptr += sectors_to_read * 0x0200;
 	}
 
-	reset_seek();
-	seek(initrd_lba);
+	error = open("INITRD");
+	if (error != 0) return error;
+
+	initrd_size = file_size;
 
 	initrd_sectors = (initrd_size + 0x01ff) / 0x0200;
 	ptr = initrd;
 
 	while (initrd_sectors) {
-		read_sectors = initrd_sectors > 0x40 ? 0x40 : initrd_sectors;
+		sectors_to_read = initrd_sectors > 0x80 ? 0x80 : initrd_sectors;
 
-		error = read(io_buf, read_sectors);
+		sectors_read = read(io_buf, sectors_to_read);
+		if (sectors_read != sectors_to_read) return -1;
+
+		error = mem_move(ptr, io_buf, sectors_to_read * 0x0200);
 		if (error != 0) return error;
 
-		error = mem_move(ptr, io_buf, read_sectors * 0x0200);
-		if (error != 0) return error;
-
-		initrd_sectors -= read_sectors;
-		ptr += read_sectors * 0x0200;
+		initrd_sectors -= sectors_to_read;
+		ptr += sectors_to_read * 0x0200;
 	}
 
 	for (uint16 i = 0; i < sizeof(cmdline); ++i) kernel_cmdline[i] = cmdline[i];

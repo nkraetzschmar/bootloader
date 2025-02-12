@@ -8,6 +8,7 @@ CC_X86 := x86_64-linux-gnu-gcc
 CFLAGS := -std=c23 -Os -g -Wall -Wextra -Wdeclaration-after-statement -Werror -fpack-struct
 CFLAGS_M16 := $(CFLAGS) -m16 -march=i386 -nostdinc -ffreestanding -fno-pic -fno-stack-protector -ffunction-sections -fdata-sections
 
+LD := ld
 LD_X86 := x86_64-linux-gnu-ld
 LDFLAGS_M16 := -m elf_i386
 
@@ -48,7 +49,13 @@ dependencies.make: *.c
 
 include dependencies.make
 
-bootloader_emu: main.o io_buf.o lib.o gpt.o fat32.o linux.o bios_services_emu.o
+bootloader.o: main.o io_buf.o lib.o gpt.o fat32.o linux.o
+	echo 'linking $^ -> $@'
+	$(LD) -r -o '$@' $^
+	$(OBJCOPY) --keep-global-symbol=init '$@'
+	$(OBJDUMP) -h '$@'
+
+bootloader_emu: bootloader.o bios_services_emu.o
 	echo 'linking $^ -> $@'
 	$(CC) -o '$@' $^
 

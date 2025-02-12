@@ -20,8 +20,6 @@ dd if="$mbr" of="$disk" bs=446 count=1 conv=notrunc 2> /dev/null
 dd if="$stage2" of="$disk" bs=512 count=32 seek=34 conv=notrunc 2> /dev/null
 
 mformat -i "$disk@@2048s" -T 1048576 -c 2 -F -v EFI ::
-echo hello | mcopy -i "$disk@@2048s" - ::/test
+mcopy -i "$disk@@2048s" "$kernel" ::/kernel
+mcopy -i "$disk@@2048s" "$initrd" ::/initrd
 mdir -i "$disk@@2048s" -/ ::
-
-# dd if="$kernel" of="$disk" bs=512 seek=2048 conv=notrunc 2> /dev/null
-# dd if="$initrd" of="$disk" bs=512 seek=34816 conv=notrunc 2> /dev/null

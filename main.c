@@ -23,14 +23,13 @@ void init()
 		halt();
 	}
 
-	// error = load_kernel();
-	// if (error != 0) {
-	// 	print_str("failed to load kernel\r\n");
-	// 	flush();
-	// 	halt();
-	// }
+	error = load_kernel();
+	if (error != 0) {
+		print_str("failed to load kernel\r\n");
+		flush();
+		halt();
+	}
 
 	flush();
-	reset();
-	// exec_kernel();
+	exec_kernel();
 }
