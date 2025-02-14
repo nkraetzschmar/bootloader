@@ -147,10 +147,10 @@ int16 load_kernel()
 		ptr += sectors_to_read * 0x0200;
 	}
 
-	error = open("INITRD");
+	error = open("initrd_with_long_name");
 	if (error != 0) return error;
 
-	initrd_size = file_size;
+	initrd_size = get_size();
 
 	initrd_sectors = (initrd_size + 0x01ff) / 0x0200;
 	ptr = initrd;
