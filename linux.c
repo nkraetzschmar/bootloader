@@ -150,7 +150,7 @@ int16 load_kernel()
 	error = open("INITRD");
 	if (error != 0) return error;
 
-	initrd_size = file_size;
+	initrd_size = get_size();
 
 	initrd_sectors = (initrd_size + 0x01ff) / 0x0200;
 	ptr = initrd;

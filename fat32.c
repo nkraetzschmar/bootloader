@@ -56,6 +56,23 @@ struct fat32_dir_entry {
 
 static_assert(sizeof(struct fat32_dir_entry) == 0x0020);
 
+
+static struct {
+	uint32 cluster_size;
+	uint32 fat_start;
+	uint32 fat_size;
+	uint32 data_start;
+	uint32 root_dir;
+	uint32 current_dir;
+} fs;
+
+static struct {
+	uint32 size;
+	uint32 start_cluster;
+	uint32 current_cluster;
+	uint32 offset;
+} file;
+
 static int16 check_bpb(struct fat32_bpb *bpb)
 {
 	if (bpb->signature != 0xaa55) {
@@ -91,22 +108,6 @@ static int16 check_bpb(struct fat32_bpb *bpb)
 	return 0;
 }
 
-static uint32 cluster_size;
-
-static uint32 fat_start;
-static uint32 fat_size;
-
-static uint32 data_start;
-
-static uint32 root_dir;
-static uint32 current_dir;
-
-static uint32 current_file;
-static uint32 current_cluster;
-static uint32 current_offset;
-
-uint32 file_size;
-
 int16 load_fat32()
 {
 	int16 error;
@@ -120,27 +121,28 @@ int16 load_fat32()
 	error = check_bpb(bpb);
 	if (error != 0) return error;
 
-	cluster_size = bpb->sectors_per_cluster;
+	fs.cluster_size = bpb->sectors_per_cluster;
 
-	fat_start = bpb->reserved_sectors_cnt;
-	fat_size = bpb->fat_size_32;
+	fs.fat_start = bpb->reserved_sectors_cnt;
+	fs.fat_size = bpb->fat_size_32;
 
 	print_str("FAT32 table @");
-	print_hex_le((uint8 *) &fat_start, 0x0004);
+	print_hex_le((uint8 *) &fs.fat_start, 0x0004);
 	print_str("\r\n");
 
-	data_start = fat_start + (bpb->num_fats * fat_size);
+	fs.data_start = fs.fat_start + (bpb->num_fats * fs.fat_size);
 
-	root_dir = bpb->root_cluster;
-	current_dir = root_dir;
-
-	current_file    = 0;
-	current_cluster = 0;
-	current_offset  = 0;
+	fs.root_dir    = bpb->root_cluster;
+	fs.current_dir = fs.root_dir;
 
 	print_str("Root directory: ");
-	print_hex_le((uint8 *) &root_dir, 0x0004);
+	print_hex_le((uint8 *) &fs.root_dir, 0x0004);
 	print_str("\r\n");
+
+	file.size            = 0;
+	file.start_cluster   = 0;
+	file.current_cluster = 0;
+	file.offset          = 0;
 
 	return 0;
 }
@@ -173,14 +175,14 @@ static char * decode_name(struct fat32_dir_entry *entry)
 	return buf;
 }
 
-static uint32 find_file(const char *file)
+int16 open(const char *name)
 {
 	uint32 read_sectors;
 	struct fat32_dir_entry *entries;
 
-	current_file    = current_dir;
-	current_cluster = current_dir;
-	current_offset  = 0x00000000;
+	file.size          = 0x00000000;
+	file.start_cluster = fs.current_dir;
+	reset_seek();
 
 	read_sectors = read(io_buf, 0x00000080);
 	if (read_sectors == 0x00000000) return -1;
@@ -191,30 +193,16 @@ static uint32 find_file(const char *file)
 		if (*((uint8 *) entries[i].name) == 0x00) break;
 		if (*((uint8 *) entries[i].name) == 0xe5) continue;
 
-		if (streq(decode_name(&entries[i]), file) && (entries[i].attr & 0x08) == 0x00) {
-			file_size = entries[i].size;
-			return (((uint32) entries[i].cluster_high) << 0x10) + entries[i].cluster_low;
+		if (streq(decode_name(&entries[i]), name) && (entries[i].attr & 0x08) == 0x00) {
+			file.size = entries[i].size;
+			file.start_cluster = (((uint32) entries[i].cluster_high) << 0x10) + entries[i].cluster_low;
+			reset_seek();
+
+			return 0;
 		}
 	}
 
-	return 0x00000000;
-}
-
-int16 open(const char *file)
-{
-	uint32 cluster;
-
-	cluster = find_file(file);
-	if (cluster == 0x00000000) {
-		print_str("File not found\r\n");
-		return -1;
-	}
-
-	current_file    = cluster;
-	current_cluster = cluster;
-	current_offset  = 0x00000000;
-
-	return 0;
+	return -1;
 }
 
 static uint32 read_fat_entry(uint32 cluster)
@@ -226,10 +214,10 @@ static uint32 read_fat_entry(uint32 cluster)
 	uint32 sector;
 	uint32 offset;
 
-	sector = fat_start + (cluster / 0x0080);
+	sector = fs.fat_start + (cluster / 0x0080);
 	offset = cluster % 0x0080;
 
-	if (sector > fat_size) {
+	if (sector > fs.fat_size) {
 		print_str("Cluster out of range\r\n");
 		return 0x00000000;
 	}
@@ -248,8 +236,8 @@ static uint32 read_fat_entry(uint32 cluster)
 
 void reset_seek()
 {
-	current_cluster = current_file;
-	current_offset  = 0;
+	file.current_cluster = file.start_cluster;
+	file.offset          = 0x00000000;
 }
 
 int16 seek(uint32 sectors)
@@ -257,31 +245,31 @@ int16 seek(uint32 sectors)
 	uint32 remaining_sectors_in_cluster;
 	uint32 next_cluster;
 
-	if (current_file == 0) {
+	if (file.start_cluster == 0x00000000) {
 		print_str("No file opened\r\n");
 		return -1;
 	}
 
 	while (sectors > 0) {
-		remaining_sectors_in_cluster = cluster_size - current_offset;
+		remaining_sectors_in_cluster = fs.cluster_size - file.offset;
 
 		if (sectors < remaining_sectors_in_cluster) {
-			current_offset += sectors;
+			file.offset += sectors;
 			return 0;
 		}
 
-		next_cluster = read_fat_entry(current_cluster);
+		next_cluster = read_fat_entry(file.current_cluster);
 
 		if (next_cluster >= 0x0ffffff8) {
-			current_offset = cluster_size;
+			file.offset = fs.cluster_size;
 			return 0;
 		} else if (next_cluster < 0x00000002 || next_cluster == 0x0ffffff7) {
 			print_str("Bad cluster\r\n");
 			return -1;
 		}
 
-		current_cluster = next_cluster;
-		current_offset = 0;
+		file.current_cluster = next_cluster;
+		file.offset = 0;
 
 		sectors -= remaining_sectors_in_cluster;
 	}
@@ -297,15 +285,20 @@ uint32 read(uint8 *buf, uint32 sectors)
 	uint32 sectors_to_read;
 	uint32 disk_sector;
 
+	if (file.start_cluster == 0x00000000) {
+		print_str("No file opened\r\n");
+		return -1;
+	}
+
 	sectors_read = 0;
 
-	/* current_offset == cluster_size indicates seek reached EOF */
-	while (sectors_read < sectors && current_offset < cluster_size) {
-		remaining_sectors_in_cluster = cluster_size - current_offset;
+	/* offset == cluster_size indicates seek reached EOF */
+	while (sectors_read < sectors && file.offset < fs.cluster_size) {
+		remaining_sectors_in_cluster = fs.cluster_size - file.offset;
 		if (sectors < remaining_sectors_in_cluster) sectors_to_read = sectors;
 		else sectors_to_read = remaining_sectors_in_cluster;
 
-		disk_sector = data_start + (cluster_size * (current_cluster - 2)) + current_offset;
+		disk_sector = fs.data_start + (fs.cluster_size * (file.current_cluster - 2)) + file.offset;
 		error = esp_read(buf, sectors_to_read, disk_sector);
 		if (error != 0) return 0x00000000;
 
@@ -315,4 +308,14 @@ uint32 read(uint8 *buf, uint32 sectors)
 	}
 
 	return sectors_read;
+}
+
+uint32 get_size()
+{
+	if (file.start_cluster == 0x00000000) {
+		print_str("No file opened\r\n");
+		return 0x00000000;
+	}
+
+	return file.size;
 }
