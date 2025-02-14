@@ -56,6 +56,18 @@ struct fat32_dir_entry {
 
 static_assert(sizeof(struct fat32_dir_entry) == 0x0020);
 
+struct fat32_lfn_entry {
+	uint8  seq;
+	uint16 name1[5];
+	uint8  attr;
+	uint8  reserved;
+	uint8  checksum;
+	uint16 name2[6];
+	uint16 zero;
+	uint16 name3[2];
+};
+
+static_assert(sizeof(struct fat32_lfn_entry) == 0x0020);
 
 static struct {
 	uint32 cluster_size;
@@ -177,8 +189,16 @@ static char * decode_name(struct fat32_dir_entry *entry)
 
 int16 open(const char *name)
 {
+	static char buf[0x0100];
+
 	uint32 read_sectors;
 	struct fat32_dir_entry *entries;
+	struct fat32_lfn_entry *lfn_entry;
+	char *lfn_cursor;
+	char *entry_name;
+
+	lfn_cursor = buf + sizeof(buf) - 1;
+	*lfn_cursor = 0x00;
 
 	file.size          = 0x00000000;
 	file.start_cluster = fs.current_dir;
@@ -193,13 +213,34 @@ int16 open(const char *name)
 		if (*((uint8 *) entries[i].name) == 0x00) break;
 		if (*((uint8 *) entries[i].name) == 0xe5) continue;
 
-		if (streq(decode_name(&entries[i]), name) && (entries[i].attr & 0x08) == 0x00) {
+		if (entries[i].attr == 0x0F && lfn_cursor) {
+			lfn_entry = (struct fat32_lfn_entry *)&entries[i];
+
+			if (lfn_cursor <= buf + 13) {
+				print_str("LFN exceeds max range\r\n");
+				lfn_cursor = (void *) 0;
+			}
+
+			for (int16 j = 0x0001; j >= 0x0000; --j) *(--lfn_cursor) = (lfn_entry->name3[j] <= 0x7f) ? (uint8)lfn_entry->name3[j] : 0x00;
+			for (int16 j = 0x0005; j >= 0x0000; --j) *(--lfn_cursor) = (lfn_entry->name2[j] <= 0x7f) ? (uint8)lfn_entry->name2[j] : 0x00;
+			for (int16 j = 0x0004; j >= 0x0000; --j) *(--lfn_cursor) = (lfn_entry->name1[j] <= 0x7f) ? (uint8)lfn_entry->name1[j] : 0x00;
+
+			continue;
+		}
+
+		if (lfn_cursor && *lfn_cursor != 0x00) entry_name = lfn_cursor;
+		else entry_name = decode_name(&entries[i]);
+
+		if (streq(entry_name, name) && (entries[i].attr & 0x08) == 0x00) {
 			file.size = entries[i].size;
 			file.start_cluster = (((uint32) entries[i].cluster_high) << 0x10) + entries[i].cluster_low;
 			reset_seek();
 
 			return 0;
 		}
+
+		lfn_cursor = buf + sizeof(buf) - 1;
+		*lfn_cursor = 0x00;
 	}
 
 	return -1;
