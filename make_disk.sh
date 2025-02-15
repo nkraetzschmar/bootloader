@@ -20,6 +20,7 @@ dd if="$mbr" of="$disk" bs=446 count=1 conv=notrunc 2> /dev/null
 dd if="$stage2" of="$disk" bs=512 count=32 seek=34 conv=notrunc 2> /dev/null
 
 mformat -i "$disk@@2048s" -T 1048576 -c 2 -F -v EFI ::
-mcopy -i "$disk@@2048s" "$kernel" ::/kernel
-mcopy -i "$disk@@2048s" "$initrd" ::/initrd_with_long_name
+mmd -i "$disk@@2048s" ::/Linux
+mcopy -i "$disk@@2048s" "$kernel" ::/Linux/kernel
+mcopy -i "$disk@@2048s" "$initrd" ::/Linux/initrd_with_long_name
 mdir -i "$disk@@2048s" -/ ::

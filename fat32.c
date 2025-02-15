@@ -246,6 +246,27 @@ int16 open(const char *name)
 	return -1;
 }
 
+int16 chdir(const char *dir)
+{
+	int16 error;
+
+	if (dir) {
+		error = open(dir);
+		if (error != 0x0000) return error;
+
+		fs.current_dir = file.start_cluster;
+	} else {
+		fs.current_dir = fs.root_dir;
+	}
+
+	file.size            = 0;
+	file.start_cluster   = 0;
+	file.current_cluster = 0;
+	file.offset          = 0;
+
+	return 0;
+}
+
 static uint32 read_fat_entry(uint32 cluster)
 {
 	static uint32 buf[0x0080];
