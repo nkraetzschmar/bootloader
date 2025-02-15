@@ -115,7 +115,10 @@ int16 load_kernel()
 	uint8 *ptr;
 	const char *kernel_uname;
 
-	error = open("KERNEL");
+	error = chdir("Linux");
+	if (error != 0) return error;
+
+	error = open("kernel");
 	if (error != 0) return error;
 
 	sectors_read = read(real_mode_kernel_code, 0x00000002);

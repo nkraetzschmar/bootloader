@@ -19,10 +19,16 @@ uint8 memeq(const void *a, const void *b, uint16 len)
 	return 1;
 }
 
+static char lowercase(char c)
+{
+	if (c >= 'A' && c <= 'Z') return 'a' + (c - 'A');
+	else return c;
+}
+
 uint8 streq(const char *a, const char *b)
 {
 	while (1) {
-		if (*a != *b) return 0;
+		if (lowercase(*a) != lowercase(*b)) return 0;
 		if (*a == 0x00) break;
 		++a;
 		++b;
