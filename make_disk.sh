@@ -23,4 +23,13 @@ mformat -i "$disk@@2048s" -T 1048576 -c 2 -F -v EFI ::
 mmd -i "$disk@@2048s" ::/Linux
 mcopy -i "$disk@@2048s" "$kernel" ::/Linux/kernel
 mcopy -i "$disk@@2048s" "$initrd" ::/Linux/initrd_with_long_name
+mmd -i "$disk@@2048s" ::/loader
+mmd -i "$disk@@2048s" ::/loader/entries
+mcopy -i "$disk@@2048s" - ::/loader/entries/example.conf << EOF
+title   Test Loader Entry
+version 0.1
+linux   /Linux/kernel
+initrd  /Linux/initrd_with_long_name
+options init=/hello
+EOF
 mdir -i "$disk@@2048s" -/ ::

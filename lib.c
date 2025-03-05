@@ -19,10 +19,29 @@ uint8 memeq(const void *a, const void *b, uint16 len)
 	return 1;
 }
 
+void memcpy(void *dst, const void *src, uint16 len)
+{
+	for (uint16 i = 0; i < len; ++i) ((uint8 *) dst)[i] = ((uint8 *) src)[i];
+}
+
 static char lowercase(char c)
 {
 	if (c >= 'A' && c <= 'Z') return 'a' + (c - 'A');
 	else return c;
+}
+
+uint16 strlen(const char *str)
+{
+	uint16 len;
+
+	len = 0;
+
+	while (*str) {
+		++len;
+		++str;
+	}
+
+	return len;
 }
 
 uint8 streq(const char *a, const char *b)
@@ -35,6 +54,14 @@ uint8 streq(const char *a, const char *b)
 	}
 
 	return 1;
+}
+
+void strcpy(char *dst, const char *src, uint16 len)
+{
+	uint16 i;
+
+	for (i = 0; i < len && src[i] != 0x00; ++i) dst[i] = src[i];
+	for (; i < len; ++i) dst[i] = 0x00;
 }
 
 static const char *hex_map = "0123456789ABCDEF";

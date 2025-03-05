@@ -2,6 +2,7 @@
 #include "bios_services.h"
 #include "lib.h"
 #include "fat32.h"
+#include "loader.h"
 #include "io_buf.h"
 #ifndef NO_INC_GEN
 #include "initrd.h"
@@ -100,8 +101,6 @@ struct setup_header *setup_header = (void *) (real_mode_kernel_code + 0x01f1);
 uint8 *prot_mode_kernel = (void *) 0x00100000;
 uint8 *initrd = (void *) 0x04000000;
 
-const char cmdline[] = "init=/hello";
-
 int16 load_kernel()
 {
 	int16 error;
@@ -115,10 +114,7 @@ int16 load_kernel()
 	uint8 *ptr;
 	const char *kernel_uname;
 
-	error = chdir("Linux");
-	if (error != 0) return error;
-
-	error = open("kernel");
+	error = open_path(get_kernel_path());
 	if (error != 0) return error;
 
 	sectors_read = read(real_mode_kernel_code, 0x00000002);
@@ -150,7 +146,7 @@ int16 load_kernel()
 		ptr += sectors_to_read * 0x0200;
 	}
 
-	error = open("initrd_with_long_name");
+	error = open_path(get_initrd_path());
 	if (error != 0) return error;
 
 	initrd_size = get_size();
@@ -171,7 +167,7 @@ int16 load_kernel()
 		ptr += sectors_to_read * 0x0200;
 	}
 
-	for (uint16 i = 0; i < sizeof(cmdline); ++i) kernel_cmdline[i] = cmdline[i];
+	strcpy((char *) kernel_cmdline, get_cmdline(), sizeof(kernel_cmdline));
 
 	setup_header->type_of_loader = 0xff;
 	setup_header->loadflags |= 0x80;
