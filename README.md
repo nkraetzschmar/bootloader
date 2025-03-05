@@ -38,7 +38,7 @@ Therefore in most common disk setups it should be perfectly fine to use this spa
 0x00007c00 - 0x00007dbe MBR (stage 1)
 
 0x00008000 - 0x0000c000 bootloader (stage 2)
-
+0x0000c000 - 0x00010000 bootloader BSS area
 0x00010000 - 0x00018000 real mode kernel code
 0x00018000 - 0x0001f000 real mode kernel heap
 0x0001f000 - 0x0001f800 kernel cmdline

@@ -1,6 +1,9 @@
 int16 load_fat32();
 int16 open(const char *file);
+void open_cluster(uint32 cluster, uint32 size);
+int16 open_path(const char *path);
 int16 chdir(const char *dir);
+int16 for_each_dir_entry(void (*callback)(const char *entry_name, uint32 entry_cluster, uint32 entry_size));
 void reset_seek();
 int16 seek(uint32 sectors);
 uint32 read(uint8 *buf, uint32 sectors);

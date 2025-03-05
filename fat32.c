@@ -184,37 +184,32 @@ static char * decode_name(struct fat32_dir_entry *entry)
 		}
 	}
 
+	*ptr = 0x00;
+
 	return buf;
 }
 
-int16 open(const char *name)
+static struct fat32_dir_entry * next_entry(struct fat32_dir_entry **entries, uint32 *entries_len, char **entry_name)
 {
 	static char buf[0x0100];
 
-	uint32 read_sectors;
-	struct fat32_dir_entry *entries;
+	struct fat32_dir_entry *entry;
 	struct fat32_lfn_entry *lfn_entry;
 	char *lfn_cursor;
-	char *entry_name;
 
 	lfn_cursor = buf + sizeof(buf) - 1;
 	*lfn_cursor = 0x00;
 
-	file.size          = 0x00000000;
-	file.start_cluster = fs.current_dir;
-	reset_seek();
+	while (*entries_len > 0) {
+		entry = *entries;
+		*entries += 1;
+		*entries_len -= 1;
 
-	read_sectors = read(io_buf, 0x00000080);
-	if (read_sectors == 0x00000000) return -1;
+		if (*((uint8 *) entry->name) == 0x00) break;
+		if (*((uint8 *) entry->name) == 0xe5) continue;
 
-	entries = (struct fat32_dir_entry *) io_buf;
-
-	for (uint16 i = 0; i < read_sectors * 0x0010; ++i) {
-		if (*((uint8 *) entries[i].name) == 0x00) break;
-		if (*((uint8 *) entries[i].name) == 0xe5) continue;
-
-		if (entries[i].attr == 0x0F && lfn_cursor) {
-			lfn_entry = (struct fat32_lfn_entry *)&entries[i];
+		if (entry->attr == 0x0F && lfn_cursor) {
+			lfn_entry = (struct fat32_lfn_entry *) entry;
 
 			if (lfn_cursor <= buf + 13) {
 				print_str("LFN exceeds max range\r\n");
@@ -228,22 +223,102 @@ int16 open(const char *name)
 			continue;
 		}
 
-		if (lfn_cursor && *lfn_cursor != 0x00) entry_name = lfn_cursor;
-		else entry_name = decode_name(&entries[i]);
+		if ((entry->attr & 0x08) == 0x00) {
+			if (lfn_cursor && *lfn_cursor != 0x00) *entry_name = lfn_cursor;
+			else *entry_name = decode_name(entry);
 
-		if (streq(entry_name, name) && (entries[i].attr & 0x08) == 0x00) {
-			file.size = entries[i].size;
-			file.start_cluster = (((uint32) entries[i].cluster_high) << 0x10) + entries[i].cluster_low;
-			reset_seek();
-
-			return 0;
+			return entry;
 		}
 
 		lfn_cursor = buf + sizeof(buf) - 1;
 		*lfn_cursor = 0x00;
 	}
 
+	return (void *) 0;
+}
+
+int16 for_each_dir_entry(void (*callback)(const char *entry_name, uint32 entry_cluster, uint32 entry_size))
+{
+	uint32 read_sectors;
+	struct fat32_dir_entry *entries;
+	uint32 entries_len;
+
+	struct fat32_dir_entry *entry;
+	char *entry_name;
+	uint32 entry_cluster;
+
+	file.size          = 0x00000000;
+	file.start_cluster = fs.current_dir;
+	reset_seek();
+
+	read_sectors = read(io_buf, 0x00000080);
+	if (read_sectors == 0x00000000) return -1;
+
+	entries     = (struct fat32_dir_entry *) io_buf;
+	entries_len = read_sectors * 0x0010;
+
+	while ((entry = next_entry(&entries, &entries_len, &entry_name)) != (void *) 0) {
+		entry_cluster = (((uint32) entry->cluster_high) << 0x10) + entry->cluster_low;
+		callback(entry_name, entry_cluster, entry->size);
+	}
+
+	return 0;
+}
+
+void open_cluster(uint32 cluster, uint32 size)
+{
+	file.size = size;
+	file.start_cluster = cluster;
+	reset_seek();
+}
+
+int16 open(const char *name)
+{
+	uint32 read_sectors;
+	struct fat32_dir_entry *entries;
+	uint32 entries_len;
+
+	struct fat32_dir_entry *entry;
+	char *entry_name;
+
+	file.size          = 0x00000000;
+	file.start_cluster = fs.current_dir;
+	reset_seek();
+
+	read_sectors = read(io_buf, 0x00000080);
+	if (read_sectors == 0x00000000) return -1;
+
+	entries     = (struct fat32_dir_entry *) io_buf;
+	entries_len = read_sectors * 0x0010;
+
+	while ((entry = next_entry(&entries, &entries_len, &entry_name)) != (void *) 0) {
+		if (streq(entry_name, name)) {
+			open_cluster((((uint32) entry->cluster_high) << 0x10) + entry->cluster_low, entry->size);
+			return 0;
+		}
+	}
+
 	return -1;
+}
+
+int16 open_path(const char *path)
+{
+	static char buf[0x0080];
+	char *ptr;
+	int16 error;
+
+	for (uint16 i = 0; i < sizeof(buf); ++i) buf[i] = 0x00;
+
+	ptr = buf;
+	while (*path != 0x00 && *path != '/') *(ptr++) = *(path++);
+
+	if (*path != '/') return open(buf);
+	else {
+		error = chdir(*buf != 0x00 ? buf : (void *) 0);
+		if (error != 0) return error;
+
+		return open_path(path + 1);
+	}
 }
 
 int16 chdir(const char *dir)
@@ -349,7 +424,7 @@ uint32 read(uint8 *buf, uint32 sectors)
 
 	if (file.start_cluster == 0x00000000) {
 		print_str("No file opened\r\n");
-		return -1;
+		return 0x00000000;
 	}
 
 	sectors_read = 0;
