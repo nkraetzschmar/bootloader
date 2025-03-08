@@ -310,7 +310,13 @@ int16 open_path(const char *path)
 	for (uint16 i = 0; i < sizeof(buf); ++i) buf[i] = 0x00;
 
 	ptr = buf;
-	while (*path != 0x00 && *path != '/') *(ptr++) = *(path++);
+	while (*path != 0x00 && *path != '/') {
+		if (ptr == buf + sizeof(buf) - 1) {
+			print_str("Path component too long\r\n");
+			return -1;
+		}
+		*(ptr++) = *(path++);
+	}
 
 	if (*path != '/') return open(buf);
 	else {
