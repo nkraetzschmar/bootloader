@@ -29,4 +29,4 @@ jobs:
         run: podman run --rm --read-only -v "$PWD:/workspace" -w /workspace dev make all
       - name: test
         timeout-minutes: 1
-        run: podman run --rm --read-only -v "$PWD:/workspace" -w /workspace dev make emu_test test
+        run: podman run --rm --read-only -v "$PWD:/workspace" -w /workspace dev make test_loader emu_test test

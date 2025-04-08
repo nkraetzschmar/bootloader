@@ -25,11 +25,40 @@ mcopy -i "$disk@@2048s" "$kernel" ::/Linux/kernel
 mcopy -i "$disk@@2048s" "$initrd" ::/Linux/initrd_with_long_name
 mmd -i "$disk@@2048s" ::/loader
 mmd -i "$disk@@2048s" ::/loader/entries
-mcopy -i "$disk@@2048s" - ::/loader/entries/example.conf << EOF
+
+mcopy -i "$disk@@2048s" - ::/loader/entries/example-00.conf << EOF
 title   Test Loader Entry
 version 0.1
 linux   /Linux/kernel
 initrd  /Linux/initrd_with_long_name
-options init=/hello
+options init=/nope
 EOF
+
+mcopy -i "$disk@@2048s" - ::/loader/entries/example-02.conf << EOF
+title    Test Loader Entry
+sort-key xyz
+version  0.1
+linux    /Linux/kernel
+initrd   /Linux/initrd_with_long_name
+options  init=/nope
+EOF
+
+mcopy -i "$disk@@2048s" - ::/loader/entries/example-03.conf << EOF
+title    Test Loader Entry
+sort-key xyz
+version  0.2
+linux    /Linux/kernel
+initrd   /Linux/initrd_with_long_name
+options  init=/hello
+EOF
+
+mcopy -i "$disk@@2048s" - ::/loader/entries/example-01.conf << EOF
+title    Test Loader Entry
+sort-key abc
+version  0.3
+linux    /Linux/kernel
+initrd   /Linux/initrd_with_long_name
+options  init=/nope
+EOF
+
 mdir -i "$disk@@2048s" -/ ::
