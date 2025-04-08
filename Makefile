@@ -34,7 +34,7 @@ test: disk
 	grep -xF 'Found GPT disk: 01234567-ABCD-0123-ABCD-0123456789AB' < serial.log > /dev/null
 	grep -xF 'Found ESP partition: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE' < serial.log > /dev/null
 	grep -xF 'Using ESP partiton @00000800' < serial.log > /dev/null
-	# grep -F 'hello from the initrd' < serial.log > /dev/null
+	grep -F 'hello from the initrd' < serial.log > /dev/null
 
 debug: disk bootloader.elf
 	echo 'running $< in qemu in debug mode'
@@ -58,6 +58,14 @@ bootloader.o: main.o io_buf.o lib.o gpt.o fat32.o loader.o linux.o
 bootloader_emu: bootloader.o bios_services_emu.o
 	echo 'linking $^ -> $@'
 	$(CC) -o '$@' $^
+
+test_loader: lib.o gpt.o fat32.o io_buf.o
+
+test_%: test_%.o
+	echo 'linking $^ -> $@'
+	$(CC) -o '$@' $^
+	echo 'running $@'
+	./'$@'
 
 disk: make_disk.sh mbr.bin bootloader.bin kernel initrd.cpio
 	echo 'creating $@'

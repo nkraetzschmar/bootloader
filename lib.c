@@ -60,7 +60,7 @@ void strcpy(char *dst, const char *src, uint16 len)
 {
 	uint16 i;
 
-	for (i = 0; i < len && src[i] != 0x00; ++i) dst[i] = src[i];
+	for (i = 0; i < len - 1 && src[i] != 0x00; ++i) dst[i] = src[i];
 	for (; i < len; ++i) dst[i] = 0x00;
 }
 

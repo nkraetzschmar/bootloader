@@ -14,7 +14,7 @@ struct entry {
 	char options[0x0400];
 };
 
-static struct entry highest_entry;
+static struct entry highest_entry = { };
 
 static void key_value(char **line, char **key, char **value)
 {
@@ -89,6 +89,170 @@ static void dir_entry_callback(const char *entry_name, uint32 entry_cluster, uin
 	}
 }
 
+static int16 cmp_alpha(const char *a, const char *b)
+{
+	while (*a) {
+		if (*a > *b) return 1;
+		if (*b > *a) return -1;
+		++a;
+		++b;
+	}
+
+	if (*b) return -1;
+	return 0;
+}
+
+static uint16 str_to_uint16(const char *str, const char **end_ptr)
+{
+	uint16 value;
+	uint8 digit;
+
+	value = 0;
+
+	while (*str) {
+		if (*str < '0' || *str > '9') break;
+		digit = *str - '0';
+
+		if (value > 0xffff / 10) return 0xffff;
+		value *= 10;
+
+		if (value > 0xffff - digit) return 0xffff;
+
+		value += digit;
+		str++;
+	}
+
+	if (end_ptr) *end_ptr = str;
+	return value;
+}
+
+static uint8 is_version_char(char c)
+{
+	if (c >= '0' && c <= '9') return 1;
+	if (c >= 'a' && c <= 'z') return 1;
+	if (c >= 'A' && c <= 'Z') return 1;
+	if (c == '.' || c == '-' || c == '~' || c == '^') return 1;
+	return 0;
+}
+
+static int16 cmp_version(const char *a, const char *b)
+{
+	uint16 int_a, int_b;
+
+	/* https://uapi-group.org/specifications/specs/version_format_specification/ (2025-03-23)
+	 *
+	 * Both strings are compared from the beginning until the end, or until the strings are found
+	 * to compare as different. In a loop:
+	 */
+
+	while (1) {
+		/* Any characters which are outside of the set of listed above (a-z, A-Z, 0-9, -, ., ~, ^)
+		 * are skipped in both strings. In particular, this means that non-ASCII characters that
+		 * are Unicode digits or letters are skipped too.
+		 */
+
+		while (*a && !is_version_char(*a)) ++a;
+		while (*b && !is_version_char(*b)) ++b;
+
+		/* If the remaining part of one of strings starts with ~: if other remaining part does
+		 * not start with ~, the string with ~ compares lower. Otherwise, both tilde characters
+		 * are skipped.
+		 */
+
+		if (*a == '~') {
+			if (*b != '~') return -1;
+			++a;
+			++b;
+			continue;
+		} else if (*b == '~') return 1;
+
+		/* If one of the strings has ended: if the other string hasn’t, the string that has remaining
+		 * characters compares higher. Otherwise, the strings compare equal.
+		 */
+
+		if (*a == 0x00 && *b == 0x00) return 0;
+		if (*b == 0x00) return 1;
+		if (*a == 0x00) return -1;
+
+		/* If the remaining part of one of strings starts with -: if the other remaining part does not
+		 * start with -, the string with - compares lower. Otherwise, both minus characters are skipped.
+		 */
+
+		if (*a == '-') {
+			if (*b != '-') return -1;
+			++a;
+			++b;
+			continue;
+		} else if (*b == '-') return 1;
+
+		/* If the remaining part of one of strings starts with ^: if the other remaining part does not
+		 * start with ^, the string with ^ compares lower. Otherwise, both caret characters are skipped.
+		 */
+
+		if (*a == '^') {
+			if (*b != '^') return -1;
+			++a;
+			++b;
+			continue;
+		} else if (*b == '^') return 1;
+
+		/* If the remaining part of one of strings starts with .: if the other remaining part does not
+		 * start with ., the string with . compares lower. Otherwise, both dot characters are skipped.
+		 */
+
+		if (*a == '.') {
+			if (*b != '.') return -1;
+			++a;
+			++b;
+			continue;
+		} else if (*b == '.') return 1;
+
+		/* If either of the remaining parts starts with a digit: numerical prefixes are compared numerically.
+		 * Any leading zeroes are skipped. The numerical prefixes (until the first non-digit character) are
+		 * evaluated as numbers. If one of the prefixes is empty, it evaluates as 0. If the numbers are different,
+		 * the string with the bigger number compares higher. Otherwise, the comparison continues at the following
+		 * characters at point 1.
+		 */
+
+		if ((*a >= '0' && *a <= '9') || (*b >= '0' && *b <= '9')) {
+			int_a = str_to_uint16(a, &a);
+			int_b = str_to_uint16(b, &b);
+
+			if (int_a > int_b) return 1;
+			if (int_b > int_a) return -1;
+
+			continue;
+		}
+
+		/* Leading alphabetical prefixes are compared alphabetically. The substrings are compared letter-by-letter.
+		 * If both letters are the same, the comparison continues with the next letter. All capital letters compare
+		 * lower than lower-case letters (B < a). When the end of one substring has been reached (a non-letter
+		 * character or the end of the whole string), if the other substring has remaining letters, it compares higher.
+		 * Otherwise, the comparison continues at the following characters at point 1.
+		 */
+
+		// We already know that both chars must be [a-zA-Z] => simple comparison is enough
+		if (*a > *b) return 1;
+		if (*b > *a) return -1;
+
+		++a;
+		++b;
+	}
+}
+
+static int16 cmp_entry(const struct entry *a, const struct entry *b)
+{
+	int16 cmp;
+
+	cmp = cmp_alpha(a->sort_key, b->sort_key);
+	if (cmp != 0) return cmp;
+
+	cmp = cmp_alpha(a->machine_id, b->machine_id);
+	if (cmp != 0) return cmp;
+
+	return cmp_version(a->version, b->version);
+}
+
 int16 find_entry()
 {
 	static struct entry entry;
@@ -115,8 +279,7 @@ int16 find_entry()
 
 		parse_entry(&entry, (char *) io_buf);
 
-		// TODO: sorting logic to decide which entry to use
-		memcpy(&highest_entry, &entry, sizeof(struct entry));
+		if (cmp_entry(&entry, &highest_entry) == 1) memcpy(&highest_entry, &entry, sizeof(struct entry));
 	}
 
 	if (*highest_entry.linux == 0x00) return -1;
