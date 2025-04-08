@@ -437,9 +437,9 @@ uint32 read(uint8 *buf, uint32 sectors)
 
 	/* offset == cluster_size indicates seek reached EOF */
 	while (sectors_read < sectors && file.offset < fs.cluster_size) {
+		sectors_to_read = sectors - sectors_read;
 		remaining_sectors_in_cluster = fs.cluster_size - file.offset;
-		if (sectors < remaining_sectors_in_cluster) sectors_to_read = sectors;
-		else sectors_to_read = remaining_sectors_in_cluster;
+		if (sectors_to_read > remaining_sectors_in_cluster) sectors_to_read = remaining_sectors_in_cluster;
 
 		disk_sector = fs.data_start + (fs.cluster_size * (file.current_cluster - 2)) + file.offset;
 		error = esp_read(buf, sectors_to_read, disk_sector);
