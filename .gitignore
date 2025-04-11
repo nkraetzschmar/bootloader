@@ -1,4 +1,5 @@
 *.bin
+*.efi
 *.elf
 *.o
 bootloader_emu

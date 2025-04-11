@@ -17,7 +17,7 @@ trap on_exit EXIT
 
 fifo="$(mktemp -u)"
 mkfifo "$fifo"
-stdbuf -i0 -o0 -e0 qemu-system-i386 -s -S -machine pc -cpu qemu32 -accel tcg -m 1024 -nodefaults -no-reboot -nographic -serial stdio -drive file="$1",format=raw < /dev/null 2>&1 > "$fifo" &
+stdbuf -i0 -o0 -e0 qemu-system-i386 -s -S -machine pc -cpu qemu32 -accel tcg -m 1024 -nodefaults -no-reboot -nographic -serial stdio -kernel "$1" < /dev/null 2>&1 > "$fifo" &
 qemu_pid="$!"
 
 stdbuf -i0 -o0 -e0 sed 's/\x1b[\[0-9;?=]*[a-zA-Z]//g;s/[^[:print:]\t]//g' < "$fifo" 2>&1 > serial.log &

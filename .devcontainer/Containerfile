@@ -1,5 +1,6 @@
 FROM debian:testing
-RUN apt-get update \
+RUN dpkg --add-architecture amd64 \
+&& apt-get update \
 && apt-get install --no-install-recommends -y \
 	$([ "$(dpkg --print-architecture)" != amd64 ] && echo crossbuild-essential-amd64 || echo) \
 	bc \
@@ -16,6 +17,9 @@ RUN apt-get update \
 	libelf-dev \
 	mtools \
 	nasm \
+	ovmf \
 	qemu-system-x86 \
+	systemd-boot-efi:amd64 \
+	systemd-ukify \
 	xz-utils \
 	;
