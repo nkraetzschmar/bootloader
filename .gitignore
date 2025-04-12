@@ -1,4 +1,5 @@
 *.bin
+*.efi
 *.elf
 *.o
 bootloader_emu
@@ -11,3 +12,4 @@ kernel
 kernel.tar.xz
 serial.log
 test_loader
+uki_disk

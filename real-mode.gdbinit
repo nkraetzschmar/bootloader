@@ -475,4 +475,3 @@ target remote localhost:1234
 set tdesc filename real-mode.xml
 break *0x7c00
 break *0x8000
-continue

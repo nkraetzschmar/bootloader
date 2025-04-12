@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "fat32.h"
 #include "io_buf.h"
+#include "setup_header.h"
 
 struct entry {
 	char title[0x0080];
@@ -12,6 +13,8 @@ struct entry {
 	char linux[0x0100];
 	char initrd[0x0100];
 	char options[0x0400];
+	uint32 uki_cluster;
+	uint32 uki_size;
 };
 
 static struct entry highest_entry = { };
@@ -73,7 +76,7 @@ static struct {
 	uint32 size;
 } config_entries[0x0010];
 
-static uint16 num_config_entries = 0;
+static uint16 num_config_entries;
 
 static void dir_entry_callback(const char *entry_name, uint32 entry_cluster, uint32 entry_size)
 {
@@ -81,6 +84,20 @@ static void dir_entry_callback(const char *entry_name, uint32 entry_cluster, uin
 
 	name_len = strlen(entry_name);
 	if (streq(entry_name + name_len - 5, ".conf")) {
+		if (num_config_entries > 0x0010) print_str("Too many config entries - ignoring excess ones\r\n");
+
+		config_entries[num_config_entries].cluster = entry_cluster;
+		config_entries[num_config_entries].size = entry_size;
+		++num_config_entries;
+	}
+}
+
+static void dir_entry_callback_uki(const char *entry_name, uint32 entry_cluster, uint32 entry_size)
+{
+	uint16 name_len;
+
+	name_len = strlen(entry_name);
+	if (streq(entry_name + name_len - 4, ".efi")) {
 		if (num_config_entries > 0x0010) print_str("Too many config entries - ignoring excess ones\r\n");
 
 		config_entries[num_config_entries].cluster = entry_cluster;
@@ -244,6 +261,9 @@ static int16 cmp_entry(const struct entry *a, const struct entry *b)
 {
 	int16 cmp;
 
+	if (a->uki_cluster != 0 && b->uki_cluster == 0) return 1;
+	if (b->uki_cluster != 0 && a->uki_cluster == 0) return -1;
+
 	cmp = cmp_alpha(a->sort_key, b->sort_key);
 	if (cmp != 0) return cmp;
 
@@ -253,7 +273,7 @@ static int16 cmp_entry(const struct entry *a, const struct entry *b)
 	return cmp_version(a->version, b->version);
 }
 
-int16 find_entry()
+int16 find_entry_conf()
 {
 	static struct entry entry;
 
@@ -262,10 +282,11 @@ int16 find_entry()
 	error = chdir((void *) 0);
 	if (error != 0) return error;
 	error = chdir("loader");
-	if (error != 0) return error;
+	if (error != 0) return 0;
 	error = chdir("entries");
-	if (error != 0) return error;
+	if (error != 0) return 0;
 
+	num_config_entries = 0;
 	error = for_each_dir_entry(dir_entry_callback);
 	if (error != 0) return error;
 
@@ -282,20 +303,85 @@ int16 find_entry()
 		if (cmp_entry(&entry, &highest_entry) == 1) memcpy(&highest_entry, &entry, sizeof(struct entry));
 	}
 
-	if (*highest_entry.linux == 0x00) return -1;
+	return 0;
+}
+
+int16 find_entry_uki()
+{
+	static struct entry entry;
+
+	int16 error;
+	struct setup_header *setup_header;
+	char *version_str;
+
+	error = chdir((void *) 0);
+	if (error != 0) return error;
+	error = chdir("EFI");
+	if (error != 0) return 0;
+	error = chdir("Linux");
+	if (error != 0) return 0;
+
+	num_config_entries = 0;
+	error = for_each_dir_entry(dir_entry_callback_uki);
+	if (error != 0) return error;
+
+	for (uint16 i = 0; i < num_config_entries; ++i) {
+		open_cluster(config_entries[i].cluster, config_entries[i].size);
+		error = read(io_buf, 0x00000002);
+		if (error == 0x00000000) {
+			print_str("Failed to read entry\r\n");
+			return error;
+		}
+
+		setup_header = (struct setup_header *) (io_buf + 0x01f1);
+		if (setup_header->header != 0x53726448) continue;
+		if (setup_header->kernel_version > 0x0100) continue;
+
+		version_str = (char *) io_buf + setup_header->kernel_version + 0x0200;
+		if (!memeq(version_str, "UKI:", 0x04)) continue;
+
+		entry = (struct entry) { };
+		entry.uki_cluster = config_entries[i].cluster;
+		entry.uki_size = config_entries[i].size;
+		strcpy(entry.version, version_str, sizeof(entry.version));
+
+		if (cmp_entry(&entry, &highest_entry) == 1) memcpy(&highest_entry, &entry, sizeof(struct entry));
+	}
+
+	return 0;
+}
+
+int16 find_entry()
+{
+	int16 error;
+
+	error = find_entry_conf();
+	if (error != 0) return error;
+
+	error = find_entry_uki();
+	if (error != 0) return error;
+
+	if (*highest_entry.linux == 0x00 && highest_entry.uki_cluster == 0x00) return -1;
 
 	print_str("Selected Boot Entry: ");
-	print_str(highest_entry.title);
-	print_str("\r\n");
-	print_str("kernel=");
-	print_str(highest_entry.linux);
-	print_str("\r\n");
-	print_str("inintrd=");
-	print_str(highest_entry.initrd);
-	print_str("\r\n");
-	print_str("cmdline=");
-	print_str(highest_entry.options);
-	print_str("\r\n");
+	if (highest_entry.uki_cluster) {
+		print_str("UKI\r\n");
+		print_str("cluster=");
+		print_hex_le((uint8 *) &highest_entry.uki_cluster, 0x04);
+		print_str("\r\n");
+	} else {
+		print_str(highest_entry.title);
+		print_str("\r\n");
+		print_str("kernel=");
+		print_str(highest_entry.linux);
+		print_str("\r\n");
+		print_str("inintrd=");
+		print_str(highest_entry.initrd);
+		print_str("\r\n");
+		print_str("cmdline=");
+		print_str(highest_entry.options);
+		print_str("\r\n");
+	}
 
 	return 0;
 }
@@ -313,4 +399,14 @@ char * get_initrd_path()
 char * get_cmdline()
 {
 	return highest_entry.options;
+}
+
+uint32 get_uki_cluster()
+{
+	return highest_entry.uki_cluster;
+}
+
+uint32 get_uki_size()
+{
+	return highest_entry.uki_size;
 }

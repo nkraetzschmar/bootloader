@@ -51,6 +51,19 @@ Therefore in most common disk setups it should be perfectly fine to use this spa
 0x04000000 - ?          initrd
 ```
 
+## Type 2 Bootloader Entries
+
+Type 2 bootloader entries, aka. UKIs (Unified Kernel Images) are EFI binaries that contain all that's needed to boot a given entry, so the kernel, the initrd, and the kernel cmdline, along with an EFI stub loader.
+Since they require an EFI firmware environment to execute the EFI stub this obviously can not directly be one-to-one ported to legacy BIOS.
+
+Theoretically one could setup a minimal fake EFI environment, just spec compliant enough to make the stub code happy, but that would require significant effort, be quite likely to break with newer stub versions, and in my opinion misses the point of UKIs.
+I'd argue having an EFI stub isn't the crucial part of a UKI, instead the point is to have a self contained binary that when executed loads a kernel image plus some additional components into memory and executes the kernel.
+
+Now this is in fact doable in legacy BIOS: to achieve this we create UKIs that, similar to the Linux kernel (at least when `CONFIG_EFI_STUB=y`), are both valid EFI binaries and valid bzImages.
+The entry point of this bzImage, however, is not directly the kernel and instead a small legacy stub that handles loading of the real kernel, initrd, etc - mirroring what the EFI stub does.
+
+The exact details of this modified, legacy compatible, UKI format are described in [legacy_uki.md](./legacy_uki.md).
+
 ## Bootloader Emulator
 
 The build target `bootloader_emu` compiles the bootloader sources into a regular userspace executable.
