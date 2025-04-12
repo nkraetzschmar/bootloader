@@ -36,12 +36,18 @@ test: disk
 	grep -xF 'Using ESP partiton @00000800' < serial.log > /dev/null
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 
-uki_test: uki.efi
+uki_test: uki.efi uki_disk
 	echo 'running $< as EFI binary'
 	./run_efi.sh '$<' | tee serial.log
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 	echo 'running $< as kernel bzImage'
 	./run_kernel.sh '$<' | tee serial.log
+	grep -F 'hello from the initrd' < serial.log > /dev/null
+	echo 'running $(word 2,$^) in qemu'
+	./run.sh '$(word 2,$^)' | tee serial.log
+	grep -xF 'Found GPT disk: 01234567-ABCD-0123-ABCD-0123456789AB' < serial.log > /dev/null
+	grep -xF 'Found ESP partition: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE' < serial.log > /dev/null
+	grep -xF 'Using ESP partiton @00000800' < serial.log > /dev/null
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 
 debug: disk bootloader.elf
@@ -76,6 +82,10 @@ test_%: test_%.o
 	./'$@'
 
 disk: make_disk.sh mbr.bin bootloader.bin kernel initrd.cpio
+	echo 'creating $@'
+	./$^ $@
+
+uki_disk: make_uki_disk.sh mbr.bin bootloader.bin uki.efi
 	echo 'creating $@'
 	./$^ $@
 

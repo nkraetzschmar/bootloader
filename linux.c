@@ -20,15 +20,19 @@ int16 load_kernel()
 	uint8 real_mode_sectors;
 	uint32 prot_mode_size;
 	uint32 prot_mode_sectors;
-	uint32 initrd_size;
+	uint32 initrd_size = 0;
 	uint32 initrd_sectors;
 	uint32 sectors_to_read;
 	uint32 sectors_read;
 	uint8 *ptr;
 	const char *kernel_uname;
 
-	error = open_path(get_kernel_path());
-	if (error != 0) return error;
+	if (get_uki_cluster()) {
+		open_cluster(get_uki_cluster(), get_uki_size());
+	} else {
+		error = open_path(get_kernel_path());
+		if (error != 0) return error;
+	}
 
 	sectors_read = read(real_mode_kernel_code, 0x00000002);
 	if (sectors_read != 0x00000002) return -1;
@@ -59,28 +63,32 @@ int16 load_kernel()
 		ptr += sectors_to_read * 0x0200;
 	}
 
-	error = open_path(get_initrd_path());
-	if (error != 0) return error;
-
-	initrd_size = get_size();
-
-	initrd_sectors = (initrd_size + 0x01ff) / 0x0200;
-	ptr = initrd;
-
-	while (initrd_sectors) {
-		sectors_to_read = initrd_sectors > 0x80 ? 0x80 : initrd_sectors;
-
-		sectors_read = read(io_buf, sectors_to_read);
-		if (sectors_read != sectors_to_read) return -1;
-
-		error = mem_move(ptr, io_buf, sectors_to_read * 0x0200);
+	if (*get_initrd_path() != 0x00) {
+		error = open_path(get_initrd_path());
 		if (error != 0) return error;
 
-		initrd_sectors -= sectors_to_read;
-		ptr += sectors_to_read * 0x0200;
+		initrd_size = get_size();
+
+		initrd_sectors = (initrd_size + 0x01ff) / 0x0200;
+		ptr = initrd;
+
+		while (initrd_sectors) {
+			sectors_to_read = initrd_sectors > 0x80 ? 0x80 : initrd_sectors;
+
+			sectors_read = read(io_buf, sectors_to_read);
+			if (sectors_read != sectors_to_read) return -1;
+
+			error = mem_move(ptr, io_buf, sectors_to_read * 0x0200);
+			if (error != 0) return error;
+
+			initrd_sectors -= sectors_to_read;
+			ptr += sectors_to_read * 0x0200;
+		}
 	}
 
-	strcpy((char *) kernel_cmdline, get_cmdline(), sizeof(kernel_cmdline));
+	if (*get_cmdline() != 0x00) {
+		strcpy((char *) kernel_cmdline, get_cmdline(), sizeof(kernel_cmdline));
+	}
 
 	setup_header->type_of_loader = 0xff;
 	setup_header->loadflags |= 0x80;
