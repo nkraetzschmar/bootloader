@@ -33,3 +33,23 @@ The actual sections within the EFI binary should follow the [UKI spec](https://u
 
 The version string pointed to in the stub kernel header should be set to `UKI:${version}` where the version is the the same as specified in the `.osrel` section of the UKI.
 This allows legacy bootloaders to extract the correct version info without having to implement EFI parsing directly.
+
+## Kexec Support
+
+Such UKIs can even be loaded via `kexec` directly, unlike their EFI only counterparts.
+This does, however, rely on using the old `kexec_load` syscall, not the newer `kexec_file_load` and requires a custom purgatory stage to transition from 64bit long-mode back down to 16bit real-mode.
+
+> [!NOTE]
+> Using `kexec_load` is disabled for safety reasons if the kernel is running with secureboot or lockdown mode enabled.
+> So in these modes these UKIs cannot be loaded via `kexec`.
+
+An example of this working is implemented in [mini_kexec.c](./mini_kexec.c) and the required purgatory in [purgatory.asm](./purgatory.asm).
+
+The purgatory essentially does the following:
+- Transitions from long-mode to protected mode by disabling paging and clearing the long-mode-enable bit in EFER.
+- Transitions from protected-mode to real-mode by clearing PAE in CR4 and PE in CR0.
+- Finally, it restores the BIOS IDT[^1] and sets up all segment registers correctly before passing control to the UKI.
+
+
+
+[^1]: This requires, that the initial kernel did not clobber the BIOSes IDT.

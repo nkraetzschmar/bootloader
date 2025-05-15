@@ -1,6 +1,6 @@
 MAKEFLAGS += --no-builtin-rules
 .SILENT:
-.PHONY: all clean distclean test
+.PHONY: all clean distclean test uki_test kexec_test
 
 CC := gcc
 CC_X86 := x86_64-linux-gnu-gcc
@@ -20,7 +20,7 @@ OBJDUMP_X86 := x86_64-linux-gnu-objdump
 
 OBJDUMP_FLAGS_M16 := -m i8086 -M intel
 
-all: disk uki.efi bootloader_emu kernel
+all: disk uki.efi kexec.cpio bootloader_emu kernel
 
 clean:
 	git clean -e '!kernel' -e '!kernel.tar.xz' -fX
@@ -48,6 +48,12 @@ uki_test: uki.efi uki_disk
 	grep -xF 'Found GPT disk: 01234567-ABCD-0123-ABCD-0123456789AB' < serial.log > /dev/null
 	grep -xF 'Found ESP partition: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE' < serial.log > /dev/null
 	grep -xF 'Using ESP partiton @00000800' < serial.log > /dev/null
+	grep -F 'hello from the initrd' < serial.log > /dev/null
+
+kexec_test: kexec.cpio
+	echo 'running $< as initrd in qemu'
+	./run_init.sh kernel '$<' init=/mini_kexec | tee serial.log
+	grep -F 'kexec_core: Starting new kernel' < serial.log > /dev/null
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 
 debug: disk bootloader.elf
@@ -105,9 +111,17 @@ hello: hello.c
 	echo 'compiling $^ -> $@'
 	$(CC_X86) $(CFLAGS) -static -o '$@' $^
 
+mini_kexec: mini_kexec.c
+	echo 'compiling $^ -> $@'
+	$(CC_X86) $(CFLAGS) -static -o '$@' $^
+
 initrd.cpio: hello
 	echo 'building $@'
 	echo $< | cpio -o -H newc > '$@'
+
+kexec.cpio: mini_kexec purgatory.bin uki.efi
+	echo 'building $@'
+	printf '%s\n' $^ | cpio -o -H newc > '$@'
 
 uki_base.efi: kernel initrd.cpio
 	ukify build --stub /usr/lib/systemd/boot/efi/linuxx64.efi.stub --linux '$(word 1,$^)' --initrd '$(word 2,$^)' --cmdline "init=/hello" --os-release "VERSION=0.1" -o '$@'

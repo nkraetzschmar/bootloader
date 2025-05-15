@@ -8,7 +8,7 @@ Implementation of the [UAPI Boot Loader Specification](https://uapi-group.org/sp
 - [x] [Support Type 1 Boot Loader Specification Entries](https://github.com/nkraetzschmar/bootloader/issues/10)
 - [x] [Support Type 2 EFI Unified Kernel Images](https://github.com/nkraetzschmar/bootloader/issues/11)
 - [ ] [Support Boot Counting](https://github.com/nkraetzschmar/bootloader/issues/12)
-- [ ] [Make UKI EFI shim usable for kexec](https://github.com/nkraetzschmar/bootloader/issues/13)
+- [x] [Make UKI stub usable for kexec](https://github.com/nkraetzschmar/bootloader/issues/13)
 
 ## Architecture
 
@@ -63,6 +63,7 @@ Now this is in fact doable in legacy BIOS: to achieve this we create UKIs that, 
 The entry point of this bzImage, however, is not directly the kernel and instead a small legacy stub that handles loading of the real kernel, initrd, etc - mirroring what the EFI stub does.
 
 The exact details of this modified, legacy compatible, UKI format are described in [legacy_uki.md](./legacy_uki.md).
+This format also provides basic [kexec support](./legacy_uki.md#kexec-support) for UKIs.
 
 ## Bootloader Emulator
 
