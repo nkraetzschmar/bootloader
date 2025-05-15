@@ -10,6 +10,9 @@ initrd.cpio
 initrd.h
 kernel
 kernel.tar.xz
+kexec.cpio
+mini_kexec
+purgatory.h
 serial.log
 test_loader
 uki_disk
