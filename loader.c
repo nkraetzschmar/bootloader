@@ -264,6 +264,9 @@ static int16 cmp_entry(const struct entry *a, const struct entry *b)
 	if (a->uki_cluster != 0 && b->uki_cluster == 0) return 1;
 	if (b->uki_cluster != 0 && a->uki_cluster == 0) return -1;
 
+	if (a->linux[0] != 0 && b->linux[0] == 0) return 1;
+	if (b->linux[0] != 0 && a->linux[0] == 0) return -1;
+
 	cmp = cmp_alpha(a->sort_key, b->sort_key);
 	if (cmp != 0) return cmp;
 
