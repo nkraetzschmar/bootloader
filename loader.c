@@ -375,7 +375,7 @@ int16 find_entry()
 		print_str("kernel=");
 		print_str(highest_entry.linux);
 		print_str("\r\n");
-		print_str("inintrd=");
+		print_str("initrd=");
 		print_str(highest_entry.initrd);
 		print_str("\r\n");
 		print_str("cmdline=");

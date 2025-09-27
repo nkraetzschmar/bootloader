@@ -23,10 +23,11 @@ OBJDUMP_FLAGS_M16 := -m i8086 -M intel
 all: disk uki.efi kexec.cpio bootloader_emu kernel
 
 clean:
-	git clean -e '!kernel' -e '!kernel.tar.xz' -fX
+	git clean -e '!kernel' -e '!kernel.tar.xz' -e '!busybox.tar.bz2' -fX
 
 distclean:
 	git clean -fX
+	rm -rf kernel_headers busybox
 
 test: disk
 	echo 'running $< in qemu'
@@ -52,7 +53,7 @@ uki_test: uki.efi uki_disk
 
 kexec_test: kexec.cpio
 	echo 'running $< as initrd in qemu'
-	./run_init.sh kernel '$<' init=/mini_kexec | tee serial.log
+	./run_init.sh kernel '$<' rdinit=/mini_kexec | tee serial.log
 	grep -F 'kexec_core: Starting new kernel' < serial.log > /dev/null
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 
@@ -91,6 +92,16 @@ disk: make_disk.sh mbr.bin bootloader.bin kernel initrd.cpio
 	echo 'creating $@'
 	./$^ $@
 
+demo: demo.img demo_uki.img
+
+demo.img: make_demo.sh mbr.bin bootloader.bin kernel busybox
+	echo 'creating $@'
+	./$^ $@
+
+demo_uki.img: make_demo_uki.sh mbr.bin bootloader.bin kernel busybox pe_inject.py kernel_stub.bin pe_loader.bin
+	echo 'creating $@'
+	./$^ $@
+
 uki_disk: make_uki_disk.sh mbr.bin bootloader.bin uki.efi
 	echo 'creating $@'
 	./$^ $@
@@ -101,10 +112,20 @@ pe_loader.elf: pe_loader.m16.o
 
 kernel.tar.xz:
 	echo 'downloading kernel sources'
-	curl -sSLf 'https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.13.1.tar.xz' > '$@'
+	curl -sSLf 'https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.16.8.tar.xz' > '$@'
 
 kernel: build_kernel.sh kernel.tar.xz
 	echo 'building kernel'
+	./$^
+
+kernel_headers: kernel
+
+busybox.tar.bz2:
+	echo 'downloading busybox sources'
+	curl -sSLf 'https://busybox.net/downloads/busybox-1.37.0.tar.bz2' > '$@'
+
+busybox: build_busybox.sh busybox.tar.bz2 kernel_headers
+	echo 'building busybox'
 	./$^
 
 hello: hello.c
@@ -124,7 +145,7 @@ kexec.cpio: mini_kexec purgatory.bin uki.efi
 	printf '%s\n' $^ | cpio -o -H newc > '$@'
 
 uki_base.efi: kernel initrd.cpio
-	ukify build --stub /usr/lib/systemd/boot/efi/linuxx64.efi.stub --linux '$(word 1,$^)' --initrd '$(word 2,$^)' --cmdline "init=/hello" --os-release "VERSION=0.1" -o '$@'
+	ukify build --stub /usr/lib/systemd/boot/efi/linuxx64.efi.stub --linux '$(word 1,$^)' --initrd '$(word 2,$^)' --cmdline "rdinit=/hello" --os-release "VERSION=0.1" -o '$@'
 
 uki.efi: pe_inject.py uki_base.efi kernel_stub.bin pe_loader.bin
 	./$^ '$@'

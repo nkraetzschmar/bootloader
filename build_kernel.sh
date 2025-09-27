@@ -31,10 +31,8 @@ cat >> .config << EOF
 CONFIG_EXPERT=y
 CONFIG_MODULES=n
 CONFIG_NET=n
-CONFIG_BLOCK=n
 CONFIG_CRYPTO=n
 CONFIG_DRM=n
-CONFIG_PCI=n
 CONFIG_SOUND=n
 CONFIG_VIRTUALIZATION=n
 CONFIG_XZ_DEC=n
@@ -45,5 +43,5 @@ EOF
 make olddefconfig
 
 make -j "$(nproc)" bzImage
-
 cp arch/x86/boot/bzImage "$dir/kernel"
+make headers_install INSTALL_HDR_PATH="$dir/kernel_headers"
