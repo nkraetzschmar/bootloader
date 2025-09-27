@@ -92,13 +92,13 @@ disk: make_disk.sh mbr.bin bootloader.bin kernel initrd.cpio
 	echo 'creating $@'
 	./$^ $@
 
-demo: demo.img demo.uki
+demo: demo.img demo_uki.img
 
-demo.img: make_demo_disk.sh mbr.bin bootloader.bin kernel busybox
+demo.img: make_demo.sh mbr.bin bootloader.bin kernel busybox
 	echo 'creating $@'
 	./$^ $@
 
-demo.uki: make_demo_uki.sh kernel busybox pe_inject.py kernel_stub.bin pe_loader.bin
+demo_uki.img: make_demo_uki.sh mbr.bin bootloader.bin kernel busybox pe_inject.py kernel_stub.bin pe_loader.bin
 	echo 'creating $@'
 	./$^ $@
 

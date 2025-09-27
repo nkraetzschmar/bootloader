@@ -6,7 +6,7 @@ bootloader_emu
 busybox
 busybox.tar.bz2
 demo.img
-demo.uki
+demo_uki.img
 dependencies.make
 disk
 hello
