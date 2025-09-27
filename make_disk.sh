@@ -31,7 +31,7 @@ title   Test Loader Entry
 version 0.1
 linux   /Linux/kernel
 initrd  /Linux/initrd_with_long_name
-options init=/nope
+options rdinit=/nope
 EOF
 
 mcopy -i "$disk@@2048s" - ::/loader/entries/example-02.conf << EOF
@@ -40,7 +40,7 @@ sort-key xyz
 version  0.1
 linux    /Linux/kernel
 initrd   /Linux/initrd_with_long_name
-options  init=/nope
+options  rdinit=/nope
 EOF
 
 mcopy -i "$disk@@2048s" - ::/loader/entries/example-03.conf << EOF
@@ -49,7 +49,7 @@ sort-key xyz
 version  0.2
 linux    /Linux/kernel
 initrd   /Linux/initrd_with_long_name
-options  init=/hello
+options  rdinit=/hello
 EOF
 
 mcopy -i "$disk@@2048s" - ::/loader/entries/example-01.conf << EOF
@@ -58,7 +58,7 @@ sort-key abc
 version  0.3
 linux    /Linux/kernel
 initrd   /Linux/initrd_with_long_name
-options  init=/nope
+options  rdinit=/nope
 EOF
 
 mdir -i "$disk@@2048s" -/ ::

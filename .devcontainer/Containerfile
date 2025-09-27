@@ -1,8 +1,10 @@
-FROM debian:testing
+FROM debian:stable
 RUN dpkg --add-architecture amd64 \
 && apt-get update \
 && apt-get install --no-install-recommends -y \
 	$([ "$(dpkg --print-architecture)" != amd64 ] && echo crossbuild-essential-amd64 || echo) \
+	arch-test \
+	bat \
 	bc \
 	bison \
 	bsdextrautils \
@@ -10,16 +12,21 @@ RUN dpkg --add-architecture amd64 \
 	ca-certificates \
 	cpio \
 	curl \
+	e2fsprogs \
 	fdisk \
+	file \
 	flex \
 	gdb-multiarch \
 	git \
 	libelf-dev \
+	libssl-dev \
+	mmdebstrap \
 	mtools \
 	nasm \
 	ovmf \
 	qemu-system-x86 \
+	rsync \
 	systemd-boot-efi:amd64 \
 	systemd-ukify \
 	xz-utils \
-	;
+&& ln -s batcat /usr/bin/bat

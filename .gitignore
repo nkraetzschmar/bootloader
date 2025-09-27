@@ -3,12 +3,17 @@
 *.elf
 *.o
 bootloader_emu
+busybox
+busybox.tar.bz2
+demo.img
+demo.uki
 dependencies.make
 disk
 hello
 initrd.cpio
 initrd.h
 kernel
+kernel_headers
 kernel.tar.xz
 kexec.cpio
 mini_kexec
