@@ -6,7 +6,7 @@
                 "${workspaceFolder}/**"
             ],
             "defines": [ "constexpr=const", "static_assert(X)=" ],
-            "compilerPath": "/usr/bin/gcc",
+            "compilerPath": "/usr/bin/x86_64-linux-gnu-gcc",
             "cStandard": "c17",
             "intelliSenseMode": "linux-gcc-x64"
         }
