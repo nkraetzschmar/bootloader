@@ -11,6 +11,32 @@ import tty
 class EscSeqFilter:
 	def __init__(self):
 		self.state = "TXT"
+		self.csi = bytearray()
+
+	def _allow_csi(self, seq: bytes) -> bool:
+		# Allow only: ESC [ <digits?> [D|C|P] ; ESC [ <0?> K ; ESC [ <0?> J
+		if not seq.startswith(b"\x1b["):
+			return False
+		final = seq[-1:]
+		body = seq[2:-1]  # bytes between '[' and final
+
+		# reject anything with multiple params or private markers
+		if any(ch in b";?:" for ch in body):
+			return False
+
+		if final in b"DCP":
+			# digits-only (or empty) count is fine
+			return body.isdigit() or body == b""
+
+		if final == b"K":
+			# EL: allow empty or 0/1/2
+			return body in (b"", b"0", b"1", b"2") or body.isdigit()
+
+		if final == b"J":
+			# ED: allow only J0 or bare J (default 0). Block J1/J2/J3.
+			return body in (b"", b"0")
+
+		return False
 
 	def feed(self, data):
 		out = bytearray()
@@ -18,11 +44,12 @@ class EscSeqFilter:
 			if self.state == "TXT":
 				if ch == 0x1B:
 					self.state = "ESC"
-				elif 0x20 <= ch <= 0x7F or ch == 0x0A or ch == 0x0D or ch == 0x08:
+				elif 0x20 <= ch <= 0x7F or ch in (0x0A, 0x0D, 0x08):
 					out.append(ch)
 			elif self.state == "ESC":
 				if ch == ord("["):
 					self.state = "CSI"
+					self.csi = bytearray(b"\x1b[")
 				elif ch == ord("]"):
 					self.state = "OSC"
 				elif ch == ord("P"):
@@ -30,7 +57,10 @@ class EscSeqFilter:
 				else:
 					self.state = "TXT"
 			elif self.state == "CSI":
+				self.csi.append(ch)
 				if 0x40 <= ch <= 0x7E:
+					if self._allow_csi(bytes(self.csi)):
+						out.extend(self.csi)
 					self.state = "TXT"
 			elif self.state == "OSC":
 				if ch == 0x07:
