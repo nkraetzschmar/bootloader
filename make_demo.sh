@@ -27,11 +27,16 @@ mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 mount -t tmpfs -o mode=0755 none /run
 mount -t tmpfs none /tmp
-mount -t vfat /dev/sda1 /efi
+mount -t vfat -o ro /dev/sda1 /efi
+
+ln -s /proc/self/fd /dev/fd
+ln -s /proc/self/fd/0 /dev/stdin
+ln -s /proc/self/fd/1 /dev/stdout
+ln -s /proc/self/fd/2 /dev/stderr
 
 echo 4 > /proc/sys/kernel/printk
 
-sh
+exec setsid -c /bin/sh -i
 EOF
 
 cat > "$tmpdir/rootfs/etc/passwd" << EOF
@@ -82,7 +87,7 @@ mcopy -i "$disk@@2048s" - ::/loader/entries/example-00.conf << EOF
 title   Demo
 version 0.1
 linux   /kernel
-options root=/dev/sda2 ro
+options loglevel=6 root=/dev/sda2 ro
 EOF
 
 mdir -i "$disk@@2048s" -/ ::

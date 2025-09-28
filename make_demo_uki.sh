@@ -29,11 +29,16 @@ mount -t sysfs sysfs /sys
 mount -t devtmpfs devtmpfs /dev
 mount -t tmpfs -o mode=0755 none /run
 mount -t tmpfs none /tmp
-mount -t vfat /dev/sda1 /efi
+mount -t vfat -o ro /dev/sda1 /efi
+
+ln -s /proc/self/fd /dev/fd
+ln -s /proc/self/fd/0 /dev/stdin
+ln -s /proc/self/fd/1 /dev/stdout
+ln -s /proc/self/fd/2 /dev/stderr
 
 echo 4 > /proc/sys/kernel/printk
 
-sh
+exec setsid -c /bin/sh -i
 EOF
 
 cat > "$tmpdir/rootfs/etc/passwd" << EOF
@@ -51,7 +56,7 @@ chmod a+x "$tmpdir/rootfs/sbin/init"
 
 (cd "$tmpdir/rootfs" && find . | cpio -o -H newc) > "$tmpdir/rootfs.cpio"
 
-ukify build --stub /usr/lib/systemd/boot/efi/linuxx64.efi.stub --linux "$kernel" --initrd "$tmpdir/rootfs.cpio" --cmdline "rdinit=/sbin/init" --os-release $'PRETTY_NAME=Demo\nVERSION=0.1\n' -o "$tmpdir/uki_base.efi"
+ukify build --stub /usr/lib/systemd/boot/efi/linuxx64.efi.stub --linux "$kernel" --initrd "$tmpdir/rootfs.cpio" --cmdline "loglevel=6 rdinit=/sbin/init" --os-release $'PRETTY_NAME=Demo\nVERSION=0.1\n' -o "$tmpdir/uki_base.efi"
 ./pe_inject.py "$tmpdir/uki_base.efi" "$kernel_stub" "$pe_loader" "$tmpdir/uki.efi"
 
 truncate -s 0 "$disk"

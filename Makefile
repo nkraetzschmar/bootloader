@@ -31,29 +31,29 @@ distclean:
 
 test: disk
 	echo 'running $< in qemu'
-	./run.sh '$<' | tee serial.log
-	grep -xF 'Found GPT disk: 01234567-ABCD-0123-ABCD-0123456789AB' < serial.log > /dev/null
-	grep -xF 'Found ESP partition: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE' < serial.log > /dev/null
-	grep -xF 'Using ESP partiton @00000800' < serial.log > /dev/null
+	./run_vm.sh -n '$<' | tee serial.log
+	grep -F 'Found GPT disk: 01234567-ABCD-0123-ABCD-0123456789AB' < serial.log > /dev/null
+	grep -F 'Found ESP partition: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE' < serial.log > /dev/null
+	grep -F 'Using ESP partiton @00000800' < serial.log > /dev/null
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 
 uki_test: uki.efi uki_disk
 	echo 'running $< as EFI binary'
-	./run_efi.sh '$<' | tee serial.log
+	./run_vm.sh -n --efi --kernel '$<' | tee serial.log
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 	echo 'running $< as kernel bzImage'
-	./run_kernel.sh '$<' | tee serial.log
+	./run_vm.sh -n --kernel '$<' | tee serial.log
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 	echo 'running $(word 2,$^) in qemu'
-	./run.sh '$(word 2,$^)' | tee serial.log
-	grep -xF 'Found GPT disk: 01234567-ABCD-0123-ABCD-0123456789AB' < serial.log > /dev/null
-	grep -xF 'Found ESP partition: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE' < serial.log > /dev/null
-	grep -xF 'Using ESP partiton @00000800' < serial.log > /dev/null
+	./run_vm.sh -n '$(word 2,$^)' | tee serial.log
+	grep -F 'Found GPT disk: 01234567-ABCD-0123-ABCD-0123456789AB' < serial.log > /dev/null
+	grep -F 'Found ESP partition: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE' < serial.log > /dev/null
+	grep -F 'Using ESP partiton @00000800' < serial.log > /dev/null
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 
-kexec_test: kexec.cpio
+kexec_test: kernel kexec.cpio
 	echo 'running $< as initrd in qemu'
-	./run_init.sh kernel '$<' rdinit=/mini_kexec | tee serial.log
+	./run_vm.sh -n --kernel '$<' --initrd '$(word 2,$^)' --append rdinit=/mini_kexec | tee serial.log
 	grep -F 'kexec_core: Starting new kernel' < serial.log > /dev/null
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 
