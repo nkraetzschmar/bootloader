@@ -1,3 +1,5 @@
+#pragma once
+
 typedef __INT8_TYPE__  int8;
 typedef __INT16_TYPE__ int16;
 typedef __INT32_TYPE__ int32;

@@ -1,1 +1,5 @@
-int16 load_kernel();
+#pragma once
+
+#include "prefix.h"
+
+int16 PREFIX(load_kernel)();

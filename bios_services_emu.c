@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#define PREFIX(name) bootloader_##name
+
 #include "types.h"
 #include "bios_services.h"
 
@@ -15,7 +17,7 @@
 static int debug = 0;
 static int disk_fd = -1;
 
-void init();
+void bootloader_init();
 
 int main(int argc, char **argv)
 {
@@ -29,34 +31,34 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	disk_fd = open(argv[1], O_RDONLY);
+	disk_fd = open(argv[1], O_RDWR);
 	if (disk_fd == -1) {
 		perror("open");
 		exit(1);
 	}
 
-	init();
+	bootloader_init();
 }
 
-void halt()
+void bootloader_halt()
 {
 	debug_printf();
 	while (1) pause();
 }
 
-void reset()
+void bootloader_reset()
 {
 	debug_printf();
 	exit(0);
 }
 
-void print_char(char c)
+void bootloader_print_char(char c)
 {
 	if (c != 0) fputc(c, stdout);
 	else fflush(stdout);
 }
 
-int16 disk_read(uint8 *buffer, uint16 sectors, uint32 lba)
+int16 bootloader_disk_read(uint8 *buffer, uint16 sectors, uint32 lba)
 {
 	uint32 len;
 	uint32 offset;
@@ -88,13 +90,45 @@ int16 disk_read(uint8 *buffer, uint16 sectors, uint32 lba)
 	return 0;
 }
 
-int16 mem_move(uint8 *dst, const uint8 *src, uint32 len)
+int16 bootloader_disk_write(const uint8 *buffer, uint16 sectors, uint32 lba)
+{
+	uint32 len;
+	uint32 offset;
+	ssize_t len_written;
+
+	debug_printf("buffer=0x%08lx, sectors=%u, lba=%u)", (size_t) buffer, sectors, lba);
+
+	if (sectors > 64) return -1;
+
+	len    = sectors * 0x0200;
+	offset = lba * 0x0200;
+
+	while (len) {
+		len_written = pwrite(disk_fd, buffer, len, offset);
+
+		if (len_written == -1) {
+			perror("pwrite");
+			return -1;
+		} else if (len_written == 0) {
+			fprintf(stderr, "unexpected zero-length write\n");
+			return -1;
+		}
+
+		len -= len_written;
+		offset += len_written;
+		buffer += len_written;
+	}
+
+	return 0;
+}
+
+int16 bootloader_mem_move(uint8 *dst, const uint8 *src, uint32 len)
 {
 	debug_printf("dst=0x%08lx, src=0x%08lx, len=%u)", (size_t) dst, (size_t) src, len);
 	return 0;
 }
 
-void exec_kernel()
+void bootloader_exec_kernel()
 {
 	debug_printf();
 	exit(0);

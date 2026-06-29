@@ -146,3 +146,21 @@ int16 esp_read(uint8 *buffer, uint16 sectors, uint32 sector)
 
 	return disk_read(buffer, sectors, lba);
 }
+
+int16 esp_write(const uint8 *buffer, uint16 sectors, uint32 sector)
+{
+	uint32 lba;
+
+	if (!esp_start) {
+		print_str("No partition loaded yet\r\n");
+		return -1;
+	}
+
+	lba = esp_start + sector;
+	if (lba > esp_end) {
+		print_str("Sector beyond partition end\r\n");
+		return -1;
+	}
+
+	return disk_write(buffer, sectors, lba);
+}

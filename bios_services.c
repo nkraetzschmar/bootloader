@@ -78,6 +78,46 @@ int16 disk_read(uint8 *buffer, uint16 sectors, uint32 lba)
 	return 0;
 }
 
+int16 disk_write(const uint8 *buffer, uint16 sectors, uint32 lba)
+{
+	static struct disk_address_packet disk_address_packet;
+
+	uint8 result;
+	uint8 error;
+	uint16 offset;
+	uint16 segment;
+
+	if (sectors > 64) return -1;
+
+	if ((uint32) buffer > 0x000fffff) return -1;
+	offset  = ((uint32) buffer & 0x0000ffff);
+	segment = ((uint32) buffer & 0x000f0000) >> 4;
+
+	disk_address_packet = (struct disk_address_packet) {
+		.size           = 0x10,
+		.reserved       = 0x00,
+		.sectors        = sectors,
+		.buffer_offset  = offset,
+		.buffer_segment = segment,
+		.lba_low        = lba,
+		.lba_high       = 0x00000000
+	};
+
+	__asm__ __volatile__ ( "int $0x13\nsetb %[res]\nmov %%ah, %[err]"
+	                       : [res] "=r" (result), [err] "=r" (error)
+	                       : "a" (0x4300), "d" (0x0080), "S" (&disk_address_packet)
+	                       : );
+
+	if (result != 0) {
+		print_str("disk write failed with ERR ");
+		print_hex_be(&error, 0x0001);
+		print_str("\r\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 int16 mem_move(uint8 *dst, const uint8 *src, uint32 len)
 {
 	static struct global_descriptor_table global_descriptor_table[6];
