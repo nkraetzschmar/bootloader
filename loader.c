@@ -1,5 +1,6 @@
 #include "types.h"
 #include "loader.h"
+#include "loader_internal.h"
 #include "lib.h"
 #include "fat32.h"
 #include "io_buf.h"
@@ -106,7 +107,7 @@ static void dir_entry_callback_uki(const char *entry_name, uint32 entry_cluster,
 	}
 }
 
-static int16 cmp_alpha(const char *a, const char *b)
+_static int16 cmp_alpha(const char *a, const char *b)
 {
 	while (*a) {
 		if (*a > *b) return 1;
@@ -152,7 +153,7 @@ static uint8 is_version_char(char c)
 	return 0;
 }
 
-static int16 cmp_version(const char *a, const char *b)
+_static int16 cmp_version(const char *a, const char *b)
 {
 	uint16 int_a, int_b;
 

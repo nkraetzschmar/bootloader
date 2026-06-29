@@ -5,8 +5,8 @@
 bootloader_emu
 busybox
 busybox.tar.bz2
-demo.img
 demo_uki.img
+demo.img
 dependencies.make
 disk
 hello
@@ -19,5 +19,7 @@ kexec.cpio
 mini_kexec
 purgatory.h
 serial.log
+test_fat32
+test_fat32_disk
 test_loader
 uki_disk

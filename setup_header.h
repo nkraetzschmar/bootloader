@@ -1,3 +1,5 @@
+#pragma once
+
 struct setup_header {
 	uint8  setup_sects;
 	uint16 root_flags;

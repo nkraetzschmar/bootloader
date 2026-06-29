@@ -1,5 +1,6 @@
 #include "types.h"
 #include "fat32.h"
+#include "fat32_internal.h"
 #include "lib.h"
 #include "gpt.h"
 #include "io_buf.h"
@@ -83,7 +84,17 @@ static struct {
 	uint32 start_cluster;
 	uint32 current_cluster;
 	uint32 offset;
+	int32  entry_index;
 } file;
+
+static uint32 load_dir(struct fat32_dir_entry *entries, uint32 capacity);
+static int16 store_dir(const struct fat32_dir_entry *entries, uint32 entries_len);
+static int16 for_each_dir_entry_loaded(struct fat32_dir_entry *entries, uint32 entries_len, void (*callback)(const char *entry_name, uint32 entry_cluster, uint32 entry_size));
+static int16 open_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *name);
+static int16 unlink_loaded(struct fat32_dir_entry *entries);
+static int16 link_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *name);
+static int16 rename_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *name);
+static int16 chdir_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *dir);
 
 static int16 check_bpb(struct fat32_bpb *bpb)
 {
@@ -155,6 +166,7 @@ int16 load_fat32()
 	file.start_cluster   = 0;
 	file.current_cluster = 0;
 	file.offset          = 0;
+	file.entry_index     = -1;
 
 	return 0;
 }
@@ -187,6 +199,32 @@ static char * decode_name(struct fat32_dir_entry *entry)
 	*ptr = 0x00;
 
 	return buf;
+}
+
+static uint32 load_dir(struct fat32_dir_entry *entries, uint32 capacity)
+{
+	uint32 read_sectors;
+
+	file.size          = 0x00000000;
+	file.start_cluster = fs.current_dir;
+	reset_seek();
+
+	read_sectors = read((uint8 *) entries, capacity / 0x0010);
+	return read_sectors * 0x0010;
+}
+
+static int16 store_dir(const struct fat32_dir_entry *entries, uint32 entries_len)
+{
+	uint32 sectors;
+
+	file.size          = 0x00000000;
+	file.start_cluster = fs.current_dir;
+	reset_seek();
+
+	sectors = (entries_len + 0x000f) / 0x0010;
+	if (write((const uint8 *) entries, sectors) != sectors) return -1;
+
+	return 0;
 }
 
 static struct fat32_dir_entry * next_entry(struct fat32_dir_entry **entries, uint32 *entries_len, char **entry_name)
@@ -239,23 +277,19 @@ static struct fat32_dir_entry * next_entry(struct fat32_dir_entry **entries, uin
 
 int16 for_each_dir_entry(void (*callback)(const char *entry_name, uint32 entry_cluster, uint32 entry_size))
 {
-	uint32 read_sectors;
-	struct fat32_dir_entry *entries;
 	uint32 entries_len;
 
+	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
+	if (entries_len == 0) return -1;
+
+	return for_each_dir_entry_loaded((struct fat32_dir_entry *) io_buf, entries_len, callback);
+}
+
+static int16 for_each_dir_entry_loaded(struct fat32_dir_entry *entries, uint32 entries_len, void (*callback)(const char *entry_name, uint32 entry_cluster, uint32 entry_size))
+{
 	struct fat32_dir_entry *entry;
 	char *entry_name;
 	uint32 entry_cluster;
-
-	file.size          = 0x00000000;
-	file.start_cluster = fs.current_dir;
-	reset_seek();
-
-	read_sectors = read(io_buf, 0x00000080);
-	if (read_sectors == 0x00000000) return -1;
-
-	entries     = (struct fat32_dir_entry *) io_buf;
-	entries_len = read_sectors * 0x0010;
 
 	while ((entry = next_entry(&entries, &entries_len, &entry_name)) != (void *) 0) {
 		entry_cluster = (((uint32) entry->cluster_high) << 0x10) + entry->cluster_low;
@@ -269,36 +303,331 @@ void open_cluster(uint32 cluster, uint32 size)
 {
 	file.size = size;
 	file.start_cluster = cluster;
+	file.entry_index = -1;
 	reset_seek();
 }
 
 int16 open(const char *name)
 {
-	uint32 read_sectors;
-	struct fat32_dir_entry *entries;
 	uint32 entries_len;
 
+	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
+	if (entries_len == 0) return -1;
+
+	return open_loaded((struct fat32_dir_entry *) io_buf, entries_len, name);
+}
+
+static int16 open_loaded(struct fat32_dir_entry *entries_start, uint32 entries_len, const char *name)
+{
+	struct fat32_dir_entry *entries;
 	struct fat32_dir_entry *entry;
 	char *entry_name;
 
 	file.size          = 0x00000000;
 	file.start_cluster = fs.current_dir;
+	file.entry_index   = -1;
 	reset_seek();
 
-	read_sectors = read(io_buf, 0x00000080);
-	if (read_sectors == 0x00000000) return -1;
-
-	entries     = (struct fat32_dir_entry *) io_buf;
-	entries_len = read_sectors * 0x0010;
+	entries = entries_start;
 
 	while ((entry = next_entry(&entries, &entries_len, &entry_name)) != (void *) 0) {
 		if (streq(entry_name, name)) {
 			open_cluster((((uint32) entry->cluster_high) << 0x10) + entry->cluster_low, entry->size);
+			file.entry_index = (int32)(entry - entries_start);
 			return 0;
 		}
 	}
 
 	return -1;
+}
+
+int16 unlink()
+{
+	int16 error;
+	uint32 entries_len;
+
+	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
+	if (entries_len == 0) return -1;
+
+	error = unlink_loaded((struct fat32_dir_entry *) io_buf);
+	if (error != 0) return error;
+
+	return store_dir((struct fat32_dir_entry *) io_buf, entries_len);
+}
+
+static int16 unlink_loaded(struct fat32_dir_entry *entries)
+{
+	int32 lfn_start;
+	int32 i;
+
+	if (file.entry_index < 0) {
+		print_str("No file opened\r\n");
+		return -1;
+	}
+
+	if (entries[file.entry_index].attr & 0x10) {
+		print_str("Cannot unlink directory\r\n");
+		return -1;
+	}
+
+	lfn_start = file.entry_index;
+	for (i = file.entry_index - 1; i >= 0; --i) {
+		if (entries[i].attr == 0x0F)
+			lfn_start = i;
+		else
+			break;
+	}
+
+	for (i = lfn_start; i <= file.entry_index; ++i) {
+		*((uint8 *) entries[i].name) = 0xe5;
+	}
+
+	return 0;
+}
+
+static uint16 lfn_entries_needed(const char *name)
+{
+	return (strlen(name) + 12) / 13;
+}
+
+static uint8 check_slot(struct fat32_dir_entry *entries_start, uint32 total_entries, uint32 index, uint32 count)
+{
+	uint8 first_byte;
+
+	if (index + count > total_entries) return 0;
+
+	for (uint32 i = 0; i < count; ++i) {
+		first_byte = *((uint8 *) entries_start[index + i].name);
+		if (first_byte != 0xe5 && first_byte != 0x00) return 0;
+	}
+
+	return 1;
+}
+
+static int32 find_free_slot(struct fat32_dir_entry *entries_start, uint32 total_entries, uint32 count)
+{
+	uint32 run_start;
+	uint32 run_len;
+	uint8 first_byte;
+
+	run_start = 0;
+	run_len = 0;
+
+	for (uint32 i = 0; i < total_entries; ++i) {
+		first_byte = *((uint8 *) entries_start[i].name);
+		if (first_byte == 0xe5 || first_byte == 0x00) {
+			if (run_len == 0) run_start = i;
+			run_len += 1;
+			if (run_len >= count) return (int32) run_start;
+		} else {
+			run_len = 0;
+		}
+	}
+
+	return -1;
+}
+
+static void make_short_name(const char *name, char *short_name)
+{
+	uint16 i;
+	uint16 j;
+	const char *dot;
+	char c;
+
+	for (i = 0; i < 11; ++i) short_name[i] = ' ';
+
+	dot = (void *) 0;
+	for (i = 0; name[i] != 0x00; ++i) {
+		if (name[i] == '.') dot = &name[i];
+	}
+
+	j = 0;
+	for (i = 0; name[i] != 0x00 && j < 6; ++i) {
+		if (&name[i] == dot) break;
+		c = name[i];
+		if (c >= 'a' && c <= 'z') c = 'A' + (c - 'a');
+		short_name[j++] = c;
+	}
+	short_name[6] = '~';
+	short_name[7] = '1';
+
+	if (dot) {
+		j = 8;
+		for (i = 1; dot[i] != 0x00 && j < 11; ++i) {
+			c = dot[i];
+			if (c >= 'a' && c <= 'z') c = 'A' + (c - 'a');
+			short_name[j++] = c;
+		}
+	}
+}
+
+static uint8 lfn_checksum(const char *short_name)
+{
+	uint8 sum;
+
+	sum = 0;
+	for (uint16 i = 0; i < 11; ++i) {
+		sum = ((sum & 1) ? 0x80 : 0) + (sum >> 1) + (uint8) short_name[i];
+	}
+
+	return sum;
+}
+
+static void write_lfn_entry(struct fat32_lfn_entry *entry, const char *name, uint16 name_len, uint8 seq, uint8 checksum)
+{
+	uint16 offset;
+	uint16 i;
+	uint16 ch;
+
+	entry->seq = seq;
+	entry->attr = 0x0F;
+	entry->reserved = 0x00;
+	entry->checksum = checksum;
+	entry->zero = 0x0000;
+
+	offset = ((seq & 0x3f) - 1) * 13;
+
+	for (i = 0; i < 5; ++i) {
+		ch = (offset + i < name_len) ? (uint16)(uint8) name[offset + i] : (offset + i == name_len) ? 0x0000 : 0xFFFF;
+		entry->name1[i] = ch;
+	}
+	for (i = 0; i < 6; ++i) {
+		ch = (offset + 5 + i < name_len) ? (uint16)(uint8) name[offset + 5 + i] : (offset + 5 + i == name_len) ? 0x0000 : 0xFFFF;
+		entry->name2[i] = ch;
+	}
+	for (i = 0; i < 2; ++i) {
+		ch = (offset + 11 + i < name_len) ? (uint16)(uint8) name[offset + 11 + i] : (offset + 11 + i == name_len) ? 0x0000 : 0xFFFF;
+		entry->name3[i] = ch;
+	}
+}
+
+static void write_short_entry(struct fat32_dir_entry *entry, const char *short_name, uint32 cluster, uint32 size)
+{
+	for (uint16 i = 0; i < 8; ++i) entry->name[i] = short_name[i];
+	for (uint16 i = 0; i < 3; ++i) entry->ext[i] = short_name[8 + i];
+	entry->attr = 0x20;
+	entry->reserved = 0x00;
+	entry->time_ts = 0x00;
+	entry->time = 0x0000;
+	entry->date = 0x0000;
+	entry->access_date = 0x0000;
+	entry->cluster_high = (uint16)(cluster >> 0x10);
+	entry->mod_time = 0x0000;
+	entry->mod_date = 0x0000;
+	entry->cluster_low = (uint16)(cluster & 0xffff);
+	entry->size = size;
+}
+
+int16 link(const char *name)
+{
+	int16 error;
+	uint32 entries_len;
+	uint32 cluster;
+	uint32 size;
+
+	cluster = file.start_cluster;
+	size    = file.size;
+
+	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
+	if (entries_len == 0) return -1;
+
+	file.start_cluster = cluster;
+	file.size          = size;
+
+	error = link_loaded((struct fat32_dir_entry *) io_buf, entries_len, name);
+	if (error != 0) return error;
+
+	return store_dir((struct fat32_dir_entry *) io_buf, entries_len);
+}
+
+static int16 link_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *name)
+{
+	uint16 lfn_count;
+	uint32 needed;
+	int32 slot;
+
+	char short_name[11];
+	uint8 checksum;
+	uint16 name_len;
+
+	uint32 cluster;
+	uint32 size;
+
+	cluster = file.start_cluster;
+	size    = file.size;
+
+	lfn_count = lfn_entries_needed(name);
+	needed = lfn_count + 1;
+
+	slot = -1;
+	if (file.entry_index >= 0) {
+		int32 candidate;
+		candidate = file.entry_index - (int32) lfn_count;
+		if (candidate >= 0 && check_slot(entries, entries_len, (uint32) candidate, needed)) {
+			slot = candidate;
+		}
+	}
+	if (slot < 0) {
+		slot = find_free_slot(entries, entries_len, needed);
+	}
+	if (slot < 0) {
+		print_str("No free directory entries\r\n");
+		return -1;
+	}
+
+	make_short_name(name, short_name);
+	checksum = lfn_checksum(short_name);
+	name_len = strlen(name);
+
+	for (uint16 i = 0; i < lfn_count; ++i) {
+		uint8 seq;
+		seq = (lfn_count - i);
+		if (i == 0) seq |= 0x40;
+		write_lfn_entry(
+			(struct fat32_lfn_entry *) &entries[slot + i],
+			name, name_len, seq, checksum
+		);
+	}
+
+	write_short_entry(&entries[slot + lfn_count], short_name, cluster, size);
+
+	file.start_cluster = cluster;
+	file.size          = size;
+	file.entry_index   = slot + (int32) lfn_count;
+
+	return 0;
+}
+
+int16 rename(const char *name)
+{
+	int16 error;
+	uint32 entries_len;
+	uint32 cluster;
+	uint32 size;
+
+	cluster = file.start_cluster;
+	size    = file.size;
+
+	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
+	if (entries_len == 0) return -1;
+
+	file.start_cluster = cluster;
+	file.size          = size;
+
+	error = rename_loaded((struct fat32_dir_entry *) io_buf, entries_len, name);
+	if (error != 0) return error;
+
+	return store_dir((struct fat32_dir_entry *) io_buf, entries_len);
+}
+
+static int16 rename_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *name)
+{
+	int16 error;
+
+	error = unlink_loaded(entries);
+	if (error != 0) return error;
+
+	return link_loaded(entries, entries_len, name);
 }
 
 int16 open_path(const char *path)
@@ -329,10 +658,22 @@ int16 open_path(const char *path)
 
 int16 chdir(const char *dir)
 {
+	uint32 entries_len;
+
+	if (dir == (void *) 0) return chdir_loaded((void *) 0, 0, (void *) 0);
+
+	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
+	if (entries_len == 0) return -1;
+
+	return chdir_loaded((struct fat32_dir_entry *) io_buf, entries_len, dir);
+}
+
+static int16 chdir_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *dir)
+{
 	int16 error;
 
 	if (dir) {
-		error = open(dir);
+		error = open_loaded(entries, entries_len, dir);
 		if (error != 0x0000) return error;
 
 		fs.current_dir = file.start_cluster;
@@ -344,6 +685,7 @@ int16 chdir(const char *dir)
 	file.start_cluster   = 0;
 	file.current_cluster = 0;
 	file.offset          = 0;
+	file.entry_index     = -1;
 
 	return 0;
 }
@@ -453,6 +795,38 @@ uint32 read(uint8 *buf, uint32 sectors)
 	return sectors_read;
 }
 
+uint32 write(const uint8 *buf, uint32 sectors)
+{
+	int16 error;
+	uint32 sectors_written;
+	uint32 remaining_sectors_in_cluster;
+	uint32 sectors_to_write;
+	uint32 disk_sector;
+
+	if (file.start_cluster == 0x00000000) {
+		print_str("No file opened\r\n");
+		return 0x00000000;
+	}
+
+	sectors_written = 0;
+
+	while (sectors_written < sectors && file.offset < fs.cluster_size) {
+		sectors_to_write = sectors - sectors_written;
+		remaining_sectors_in_cluster = fs.cluster_size - file.offset;
+		if (sectors_to_write > remaining_sectors_in_cluster) sectors_to_write = remaining_sectors_in_cluster;
+
+		disk_sector = fs.data_start + (fs.cluster_size * (file.current_cluster - 2)) + file.offset;
+		error = esp_write(buf, sectors_to_write, disk_sector);
+		if (error != 0) return 0x00000000;
+
+		seek(sectors_to_write);
+		sectors_written += sectors_to_write;
+		buf += sectors_to_write * 0x0200;
+	}
+
+	return sectors_written;
+}
+
 uint32 get_size()
 {
 	if (file.start_cluster == 0x00000000) {
@@ -462,3 +836,10 @@ uint32 get_size()
 
 	return file.size;
 }
+
+#ifdef NO_STATIC_INTERNALS
+int32 get_entry_index()
+{
+	return file.entry_index;
+}
+#endif
