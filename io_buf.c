@@ -11,6 +11,8 @@ static uint8 heap[0x00010000];
 static enum io_buf_state state = IO_BUF_FREE;
 static uint16 *soft_notify = (void *) 0;
 
+const uint32 io_buf_len = sizeof(heap);
+
 uint8 * acquire_io_buf_hard(void)
 {
 	if (state == IO_BUF_HARD) return (void *) 0;

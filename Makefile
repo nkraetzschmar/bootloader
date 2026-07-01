@@ -6,7 +6,7 @@ UNIT_TESTS := loader fat32 io_buf
 CC := gcc
 CC_X86 := x86_64-linux-gnu-gcc
 
-CFLAGS := -std=c23 -Os -g -Wall -Wextra -Wdeclaration-after-statement -Werror -fpack-struct -fno-builtin
+CFLAGS := -std=c23 -Os -g -Wall -Wextra -Wdeclaration-after-statement -Werror -Wno-address-of-packed-member -fpack-struct -fno-builtin
 CFLAGS_USER := $(CFLAGS) -DNO_STATIC_INTERNALS
 CFLAGS_M16 := $(CFLAGS) -m16 -march=i386 -nostdinc -ffreestanding -fno-pic -fno-stack-protector -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-exceptions -ffunction-sections -fdata-sections
 
