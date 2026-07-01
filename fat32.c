@@ -131,10 +131,17 @@ static int16 check_bpb(struct fat32_bpb *bpb)
 	return 0;
 }
 
-int16 load_fat32()
+int16 load_fat32(void)
 {
 	int16 error;
+	auto_release uint8 *io_buf = (void *) 0;
 	struct fat32_bpb *bpb;
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	error = esp_read(io_buf, 0x0001, 0x0000);
 	if (error != 0) return error;
@@ -277,7 +284,14 @@ static struct fat32_dir_entry * next_entry(struct fat32_dir_entry **entries, uin
 
 int16 for_each_dir_entry(void (*callback)(const char *entry_name, uint32 entry_cluster, uint32 entry_size))
 {
+	auto_release uint8 *io_buf = (void *) 0;
 	uint32 entries_len;
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
 	if (entries_len == 0) return -1;
@@ -309,7 +323,14 @@ void open_cluster(uint32 cluster, uint32 size)
 
 int16 open(const char *name)
 {
+	auto_release uint8 *io_buf = (void *) 0;
 	uint32 entries_len;
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
 	if (entries_len == 0) return -1;
@@ -341,10 +362,17 @@ static int16 open_loaded(struct fat32_dir_entry *entries_start, uint32 entries_l
 	return -1;
 }
 
-int16 unlink()
+int16 unlink(void)
 {
 	int16 error;
+	auto_release uint8 *io_buf = (void *) 0;
 	uint32 entries_len;
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
 	if (entries_len == 0) return -1;
@@ -521,12 +549,19 @@ static void write_short_entry(struct fat32_dir_entry *entry, const char *short_n
 int16 link(const char *name)
 {
 	int16 error;
+	auto_release uint8 *io_buf = (void *) 0;
 	uint32 entries_len;
 	uint32 cluster;
 	uint32 size;
 
 	cluster = file.start_cluster;
 	size    = file.size;
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
 	if (entries_len == 0) return -1;
@@ -601,12 +636,19 @@ static int16 link_loaded(struct fat32_dir_entry *entries, uint32 entries_len, co
 int16 rename(const char *name)
 {
 	int16 error;
+	auto_release uint8 *io_buf = (void *) 0;
 	uint32 entries_len;
 	uint32 cluster;
 	uint32 size;
 
 	cluster = file.start_cluster;
 	size    = file.size;
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
 	if (entries_len == 0) return -1;
@@ -658,9 +700,16 @@ int16 open_path(const char *path)
 
 int16 chdir(const char *dir)
 {
+	auto_release uint8 *io_buf = (void *) 0;
 	uint32 entries_len;
 
 	if (dir == (void *) 0) return chdir_loaded((void *) 0, 0, (void *) 0);
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
 	if (entries_len == 0) return -1;
@@ -719,7 +768,7 @@ static uint32 read_fat_entry(uint32 cluster)
 	return buf[offset];
 }
 
-void reset_seek()
+void reset_seek(void)
 {
 	file.current_cluster = file.start_cluster;
 	file.offset          = 0x00000000;
@@ -827,7 +876,7 @@ uint32 write(const uint8 *buf, uint32 sectors)
 	return sectors_written;
 }
 
-uint32 get_size()
+uint32 get_size(void)
 {
 	if (file.start_cluster == 0x00000000) {
 		print_str("No file opened\r\n");
@@ -838,7 +887,7 @@ uint32 get_size()
 }
 
 #ifdef NO_STATIC_INTERNALS
-int32 get_entry_index()
+int32 get_entry_index(void)
 {
 	return file.entry_index;
 }

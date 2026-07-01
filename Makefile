@@ -1,6 +1,6 @@
 MAKEFLAGS += --no-builtin-rules
 .SILENT:
-UNIT_TESTS := loader fat32
+UNIT_TESTS := loader fat32 io_buf
 .PHONY: all clean distclean test unit_tests qemu_test uki_test kexec_test emu_test $(UNIT_TESTS:%=run_test_%)
 
 CC := gcc
@@ -89,6 +89,8 @@ bootloader_emu: bootloader.o bios_services_emu.o
 test_loader: lib.emu.o gpt.emu.o fat32.emu.o io_buf.emu.o loader.emu.o
 
 test_fat32: lib.emu.o gpt.emu.o fat32.emu.o io_buf.emu.o
+
+test_io_buf: io_buf.emu.o
 
 test_fat32_inputs := test_fat32_disk
 

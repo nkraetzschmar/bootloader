@@ -21,5 +21,6 @@ purgatory.h
 serial.log
 test_fat32
 test_fat32_disk
+test_io_buf
 test_loader
 uki_disk

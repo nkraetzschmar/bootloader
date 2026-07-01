@@ -277,11 +277,12 @@ static int16 cmp_entry(const struct entry *a, const struct entry *b)
 	return cmp_version(a->version, b->version);
 }
 
-int16 find_entry_conf()
+int16 find_entry_conf(void)
 {
 	static struct entry entry;
 
 	int16 error;
+	auto_release uint8 *io_buf = (void *) 0;
 
 	error = chdir((void *) 0);
 	if (error != 0) return error;
@@ -293,6 +294,12 @@ int16 find_entry_conf()
 	num_config_entries = 0;
 	error = for_each_dir_entry(dir_entry_callback);
 	if (error != 0) return error;
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	for (uint16 i = 0; i < num_config_entries; ++i) {
 		open_cluster(config_entries[i].cluster, config_entries[i].size);
@@ -310,11 +317,12 @@ int16 find_entry_conf()
 	return 0;
 }
 
-int16 find_entry_uki()
+int16 find_entry_uki(void)
 {
 	static struct entry entry;
 
 	int16 error;
+	auto_release uint8 *io_buf = (void *) 0;
 	struct setup_header *setup_header;
 	char *version_str;
 
@@ -328,6 +336,12 @@ int16 find_entry_uki()
 	num_config_entries = 0;
 	error = for_each_dir_entry(dir_entry_callback_uki);
 	if (error != 0) return error;
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	for (uint16 i = 0; i < num_config_entries; ++i) {
 		open_cluster(config_entries[i].cluster, config_entries[i].size);
@@ -355,7 +369,7 @@ int16 find_entry_uki()
 	return 0;
 }
 
-int16 find_entry()
+int16 find_entry(void)
 {
 	int16 error;
 
@@ -390,27 +404,27 @@ int16 find_entry()
 	return 0;
 }
 
-char * get_kernel_path()
+char * get_kernel_path(void)
 {
 	return highest_entry.linux;
 }
 
-char * get_initrd_path()
+char * get_initrd_path(void)
 {
 	return highest_entry.initrd;
 }
 
-char * get_cmdline()
+char * get_cmdline(void)
 {
 	return highest_entry.options;
 }
 
-uint32 get_uki_cluster()
+uint32 get_uki_cluster(void)
 {
 	return highest_entry.uki_cluster;
 }
 
-uint32 get_uki_size()
+uint32 get_uki_size(void)
 {
 	return highest_entry.uki_size;
 }
