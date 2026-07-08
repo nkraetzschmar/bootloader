@@ -81,11 +81,18 @@ static const uint8 esp_type[0x0010] = { 0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2
 static uint32 esp_start = 0;
 static uint32 esp_end;
 
-int16 find_esp()
+int16 find_esp(void)
 {
 	int16 error;
+	auto_release uint8 *io_buf = (void *) 0;
 	struct gpt_header *header;
 	struct gpt_entry *entries;
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	error = disk_read(io_buf, 0x0020, 0x0001);
 	if (error != 0) return error;

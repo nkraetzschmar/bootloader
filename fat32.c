@@ -87,14 +87,17 @@ static struct {
 	int32  entry_index;
 } file;
 
-static uint32 load_dir(struct fat32_dir_entry *entries, uint32 capacity);
-static int16 store_dir(const struct fat32_dir_entry *entries, uint32 entries_len);
-static int16 for_each_dir_entry_loaded(struct fat32_dir_entry *entries, uint32 entries_len, void (*callback)(const char *entry_name, uint32 entry_cluster, uint32 entry_size));
-static int16 open_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *name);
-static int16 unlink_loaded(struct fat32_dir_entry *entries);
-static int16 link_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *name);
-static int16 rename_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *name);
-static int16 chdir_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *dir);
+static struct {
+	uint32 current_dir;
+	uint16 is_valid;
+	struct fat32_dir_entry *buf;
+	uint32 num_entries;
+} dir_cache;
+
+static int16 load_dir(void);
+static int16 write_dir(void);
+static int16 unlink_loaded(void);
+static int16 link_loaded(const char *name);
 
 static int16 check_bpb(struct fat32_bpb *bpb)
 {
@@ -131,10 +134,17 @@ static int16 check_bpb(struct fat32_bpb *bpb)
 	return 0;
 }
 
-int16 load_fat32()
+int16 load_fat32(void)
 {
 	int16 error;
+	auto_release uint8 *io_buf = (void *) 0;
 	struct fat32_bpb *bpb;
+
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
 
 	error = esp_read(io_buf, 0x0001, 0x0000);
 	if (error != 0) return error;
@@ -201,29 +211,55 @@ static char * decode_name(struct fat32_dir_entry *entry)
 	return buf;
 }
 
-static uint32 load_dir(struct fat32_dir_entry *entries, uint32 capacity)
+static int16 load_dir(void)
 {
-	uint32 read_sectors;
+	uint8 *io_buf;
+	uint8 file_save[sizeof(file)];
+
+	if (dir_cache.is_valid && dir_cache.current_dir == fs.current_dir) return 0;
+
+	io_buf = acquire_io_buf_soft(&dir_cache.is_valid);
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
+
+	dir_cache.buf         = (struct fat32_dir_entry *) io_buf;
+	dir_cache.current_dir = fs.current_dir;
+	dir_cache.num_entries = io_buf_len / sizeof(struct fat32_dir_entry);
+
+	memcpy(file_save, &file, sizeof(file));
 
 	file.size          = 0x00000000;
 	file.start_cluster = fs.current_dir;
 	reset_seek();
 
-	read_sectors = read((uint8 *) entries, capacity / 0x0010);
-	return read_sectors * 0x0010;
+	if (read((uint8 *) dir_cache.buf, io_buf_len / 0x0200) == 0) {
+		dir_cache.is_valid = 0;
+		memcpy(&file, file_save, sizeof(file));
+		return -1;
+	}
+
+	memcpy(&file, file_save, sizeof(file));
+	return 0;
 }
 
-static int16 store_dir(const struct fat32_dir_entry *entries, uint32 entries_len)
+static int16 write_dir(void)
 {
-	uint32 sectors;
+	uint8 file_save[sizeof(file)];
+	uint32 written;
+
+	memcpy(file_save, &file, sizeof(file));
 
 	file.size          = 0x00000000;
 	file.start_cluster = fs.current_dir;
 	reset_seek();
 
-	sectors = (entries_len + 0x000f) / 0x0010;
-	if (write((const uint8 *) entries, sectors) != sectors) return -1;
+	written = write((const uint8 *) dir_cache.buf, io_buf_len / 0x0200);
 
+	memcpy(&file, file_save, sizeof(file));
+
+	if (written == 0) return -1;
 	return 0;
 }
 
@@ -277,19 +313,18 @@ static struct fat32_dir_entry * next_entry(struct fat32_dir_entry **entries, uin
 
 int16 for_each_dir_entry(void (*callback)(const char *entry_name, uint32 entry_cluster, uint32 entry_size))
 {
+	int16 error;
+	struct fat32_dir_entry *entries;
 	uint32 entries_len;
-
-	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
-	if (entries_len == 0) return -1;
-
-	return for_each_dir_entry_loaded((struct fat32_dir_entry *) io_buf, entries_len, callback);
-}
-
-static int16 for_each_dir_entry_loaded(struct fat32_dir_entry *entries, uint32 entries_len, void (*callback)(const char *entry_name, uint32 entry_cluster, uint32 entry_size))
-{
 	struct fat32_dir_entry *entry;
 	char *entry_name;
 	uint32 entry_cluster;
+
+	error = load_dir();
+	if (error != 0) return error;
+
+	entries     = dir_cache.buf;
+	entries_len = dir_cache.num_entries;
 
 	while ((entry = next_entry(&entries, &entries_len, &entry_name)) != (void *) 0) {
 		entry_cluster = (((uint32) entry->cluster_high) << 0x10) + entry->cluster_low;
@@ -309,26 +344,24 @@ void open_cluster(uint32 cluster, uint32 size)
 
 int16 open(const char *name)
 {
-	uint32 entries_len;
-
-	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
-	if (entries_len == 0) return -1;
-
-	return open_loaded((struct fat32_dir_entry *) io_buf, entries_len, name);
-}
-
-static int16 open_loaded(struct fat32_dir_entry *entries_start, uint32 entries_len, const char *name)
-{
+	int16 error;
+	struct fat32_dir_entry *entries_start;
 	struct fat32_dir_entry *entries;
+	uint32 entries_len;
 	struct fat32_dir_entry *entry;
 	char *entry_name;
+
+	error = load_dir();
+	if (error != 0) return error;
 
 	file.size          = 0x00000000;
 	file.start_cluster = fs.current_dir;
 	file.entry_index   = -1;
 	reset_seek();
 
-	entries = entries_start;
+	entries_start = dir_cache.buf;
+	entries       = entries_start;
+	entries_len   = dir_cache.num_entries;
 
 	while ((entry = next_entry(&entries, &entries_len, &entry_name)) != (void *) 0) {
 		if (streq(entry_name, name)) {
@@ -341,24 +374,31 @@ static int16 open_loaded(struct fat32_dir_entry *entries_start, uint32 entries_l
 	return -1;
 }
 
-int16 unlink()
+int16 unlink(void)
 {
 	int16 error;
-	uint32 entries_len;
 
-	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
-	if (entries_len == 0) return -1;
-
-	error = unlink_loaded((struct fat32_dir_entry *) io_buf);
+	error = load_dir();
 	if (error != 0) return error;
 
-	return store_dir((struct fat32_dir_entry *) io_buf, entries_len);
+	error = unlink_loaded();
+	if (error != 0) return error;
+
+	return write_dir();
 }
 
-static int16 unlink_loaded(struct fat32_dir_entry *entries)
+static int16 unlink_loaded(void)
 {
+	struct fat32_dir_entry *entries;
 	int32 lfn_start;
 	int32 i;
+
+	if (!dir_cache.is_valid || dir_cache.current_dir != fs.current_dir) {
+		print_str("Directory cache not loaded\r\n");
+		return -1;
+	}
+
+	entries = dir_cache.buf;
 
 	if (file.entry_index < 0) {
 		print_str("No file opened\r\n");
@@ -521,27 +561,19 @@ static void write_short_entry(struct fat32_dir_entry *entry, const char *short_n
 int16 link(const char *name)
 {
 	int16 error;
-	uint32 entries_len;
-	uint32 cluster;
-	uint32 size;
 
-	cluster = file.start_cluster;
-	size    = file.size;
-
-	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
-	if (entries_len == 0) return -1;
-
-	file.start_cluster = cluster;
-	file.size          = size;
-
-	error = link_loaded((struct fat32_dir_entry *) io_buf, entries_len, name);
+	error = load_dir();
 	if (error != 0) return error;
 
-	return store_dir((struct fat32_dir_entry *) io_buf, entries_len);
+	error = link_loaded(name);
+	if (error != 0) return error;
+
+	return write_dir();
 }
 
-static int16 link_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *name)
+static int16 link_loaded(const char *name)
 {
+	struct fat32_dir_entry *entries;
 	uint16 lfn_count;
 	uint32 needed;
 	int32 slot;
@@ -553,6 +585,13 @@ static int16 link_loaded(struct fat32_dir_entry *entries, uint32 entries_len, co
 	uint32 cluster;
 	uint32 size;
 
+	if (!dir_cache.is_valid || dir_cache.current_dir != fs.current_dir) {
+		print_str("Directory cache not loaded\r\n");
+		return -1;
+	}
+
+	entries = dir_cache.buf;
+
 	cluster = file.start_cluster;
 	size    = file.size;
 
@@ -563,12 +602,12 @@ static int16 link_loaded(struct fat32_dir_entry *entries, uint32 entries_len, co
 	if (file.entry_index >= 0) {
 		int32 candidate;
 		candidate = file.entry_index - (int32) lfn_count;
-		if (candidate >= 0 && check_slot(entries, entries_len, (uint32) candidate, needed)) {
+		if (candidate >= 0 && check_slot(entries, dir_cache.num_entries, (uint32) candidate, needed)) {
 			slot = candidate;
 		}
 	}
 	if (slot < 0) {
-		slot = find_free_slot(entries, entries_len, needed);
+		slot = find_free_slot(entries, dir_cache.num_entries, needed);
 	}
 	if (slot < 0) {
 		print_str("No free directory entries\r\n");
@@ -601,33 +640,17 @@ static int16 link_loaded(struct fat32_dir_entry *entries, uint32 entries_len, co
 int16 rename(const char *name)
 {
 	int16 error;
-	uint32 entries_len;
-	uint32 cluster;
-	uint32 size;
 
-	cluster = file.start_cluster;
-	size    = file.size;
-
-	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
-	if (entries_len == 0) return -1;
-
-	file.start_cluster = cluster;
-	file.size          = size;
-
-	error = rename_loaded((struct fat32_dir_entry *) io_buf, entries_len, name);
+	error = load_dir();
 	if (error != 0) return error;
 
-	return store_dir((struct fat32_dir_entry *) io_buf, entries_len);
-}
-
-static int16 rename_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *name)
-{
-	int16 error;
-
-	error = unlink_loaded(entries);
+	error = unlink_loaded();
 	if (error != 0) return error;
 
-	return link_loaded(entries, entries_len, name);
+	error = link_loaded(name);
+	if (error != 0) return error;
+
+	return write_dir();
 }
 
 int16 open_path(const char *path)
@@ -658,23 +681,11 @@ int16 open_path(const char *path)
 
 int16 chdir(const char *dir)
 {
-	uint32 entries_len;
-
-	if (dir == (void *) 0) return chdir_loaded((void *) 0, 0, (void *) 0);
-
-	entries_len = load_dir((struct fat32_dir_entry *) io_buf, 0x00000800);
-	if (entries_len == 0) return -1;
-
-	return chdir_loaded((struct fat32_dir_entry *) io_buf, entries_len, dir);
-}
-
-static int16 chdir_loaded(struct fat32_dir_entry *entries, uint32 entries_len, const char *dir)
-{
 	int16 error;
 
 	if (dir) {
-		error = open_loaded(entries, entries_len, dir);
-		if (error != 0x0000) return error;
+		error = open(dir);
+		if (error != 0) return error;
 
 		fs.current_dir = file.start_cluster;
 	} else {
@@ -719,7 +730,7 @@ static uint32 read_fat_entry(uint32 cluster)
 	return buf[offset];
 }
 
-void reset_seek()
+void reset_seek(void)
 {
 	file.current_cluster = file.start_cluster;
 	file.offset          = 0x00000000;
@@ -827,7 +838,7 @@ uint32 write(const uint8 *buf, uint32 sectors)
 	return sectors_written;
 }
 
-uint32 get_size()
+uint32 get_size(void)
 {
 	if (file.start_cluster == 0x00000000) {
 		print_str("No file opened\r\n");
@@ -838,7 +849,7 @@ uint32 get_size()
 }
 
 #ifdef NO_STATIC_INTERNALS
-int32 get_entry_index()
+int32 get_entry_index(void)
 {
 	return file.entry_index;
 }

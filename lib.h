@@ -2,7 +2,7 @@
 
 #include "prefix.h"
 
-void PREFIX(flush)();
+void PREFIX(flush)(void);
 void PREFIX(print_str)(const char *str);
 
 uint8 PREFIX(memeq)(const void *a, const void *b, uint16 len);

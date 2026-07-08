@@ -14,9 +14,10 @@ struct setup_header *setup_header = (void *) (real_mode_kernel_code + 0x01f1);
 uint8 *prot_mode_kernel = (void *) 0x00100000;
 uint8 *initrd = (void *) 0x04000000;
 
-int16 load_kernel()
+int16 load_kernel(void)
 {
 	int16 error;
+	auto_release uint8 *io_buf = (void *) 0;
 	uint8 real_mode_sectors;
 	uint32 prot_mode_size;
 	uint32 prot_mode_sectors;
@@ -50,6 +51,12 @@ int16 load_kernel()
 	prot_mode_sectors = (prot_mode_size + 0x1ff) / 0x200;
 	ptr = prot_mode_kernel;
 
+	io_buf = acquire_io_buf_hard();
+	if (!io_buf) {
+		print_str("Failed to acquire io_buf\r\n");
+		return -1;
+	}
+
 	while (prot_mode_sectors) {
 		sectors_to_read = prot_mode_sectors > 0x80 ? 0x80 : prot_mode_sectors;
 
@@ -63,6 +70,9 @@ int16 load_kernel()
 		ptr += sectors_to_read * 0x0200;
 	}
 
+	release_io_buf();
+	io_buf = (void *) 0;
+
 	if (*get_initrd_path() != 0x00) {
 		error = open_path(get_initrd_path());
 		if (error != 0) return error;
@@ -71,6 +81,12 @@ int16 load_kernel()
 
 		initrd_sectors = (initrd_size + 0x01ff) / 0x0200;
 		ptr = initrd;
+
+		io_buf = acquire_io_buf_hard();
+		if (!io_buf) {
+			print_str("Failed to acquire io_buf\r\n");
+			return -1;
+		}
 
 		while (initrd_sectors) {
 			sectors_to_read = initrd_sectors > 0x80 ? 0x80 : initrd_sectors;
@@ -84,6 +100,9 @@ int16 load_kernel()
 			initrd_sectors -= sectors_to_read;
 			ptr += sectors_to_read * 0x0200;
 		}
+
+		release_io_buf();
+		io_buf = (void *) 0;
 	}
 
 	if (*get_cmdline() != 0x00) {
