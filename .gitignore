@@ -5,6 +5,7 @@
 bootloader_emu
 busybox
 busybox.tar.bz2
+counted_disk
 demo_uki.img
 demo.img
 dependencies.make

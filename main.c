@@ -35,7 +35,7 @@ void init()
 	if (error != 0) {
 		print_str("Failed to load kernel\r\n");
 		flush();
-		halt();
+		reset();
 	}
 
 	flush();

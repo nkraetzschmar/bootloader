@@ -31,5 +31,5 @@ done
 
 exec ./term_emu.py qemu-system-x86_64 \
 	-machine "$machine" -cpu qemu64 -accel tcg -m 1024 \
-	-nodefaults -no-reboot -nographic -serial "$serial" \
+	-nodefaults -nographic -serial "$serial" \
 	"${qemu_opts[@]}"

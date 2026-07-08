@@ -1,7 +1,7 @@
 MAKEFLAGS += --no-builtin-rules
 .SILENT:
 UNIT_TESTS := loader fat32 io_buf
-.PHONY: all clean distclean test unit_tests qemu_test uki_test kexec_test emu_test $(UNIT_TESTS:%=run_test_%)
+.PHONY: all clean distclean test unit_tests qemu_test uki_test kexec_test boot_count_test emu_test $(UNIT_TESTS:%=run_test_%)
 
 CC := gcc
 CC_X86 := x86_64-linux-gnu-gcc
@@ -24,7 +24,7 @@ OBJDUMP_FLAGS_M16 := -m i8086 -M intel
 
 all: disk uki.efi kexec.cpio bootloader_emu kernel
 
-test: unit_tests emu_test qemu_test uki_test kexec_test
+test: unit_tests emu_test qemu_test uki_test kexec_test boot_count_test
 
 unit_tests: $(UNIT_TESTS:%=run_test_%)
 
@@ -61,6 +61,12 @@ kexec_test: kernel kexec.cpio
 	echo 'running $< as initrd in qemu'
 	./run_vm.sh -n --kernel '$<' --initrd '$(word 2,$^)' --append rdinit=/mini_kexec | tee serial.log
 	grep -F 'kexec_core: Starting new kernel' < serial.log > /dev/null
+	grep -F 'hello from the initrd' < serial.log > /dev/null
+
+boot_count_test: counted_disk
+	echo 'running $< in qemu'
+	./run_vm.sh -n '$<' | tee serial.log
+	grep -F 'Failed to load kernel' < serial.log > /dev/null
 	grep -F 'hello from the initrd' < serial.log > /dev/null
 
 debug: disk bootloader.elf
@@ -111,6 +117,10 @@ endef
 $(foreach unit,$(UNIT_TESTS),$(eval $(call UNIT_TEST_RULE,$(unit))))
 
 disk: make_disk.sh mbr.bin bootloader.bin kernel initrd.cpio
+	echo 'creating $@'
+	./$^ $@
+
+counted_disk: make_counted_disk.sh mbr.bin bootloader.bin kernel initrd.cpio
 	echo 'creating $@'
 	./$^ $@
 
