@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #define PREFIX(name) bootloader_##name
 
@@ -27,6 +28,8 @@ int16 bootloader_disk_write(const uint8 *, uint16, uint32)
 
 int main()
 {
+	char buf[64];
+
 	printf("Testing cmp_alpha...\n");
 
 	assert(bootloader_cmp_alpha("abc", "abc") == 0);
@@ -119,6 +122,47 @@ int main()
 	// 1+2+3 > 1.3.3
 	assert(bootloader_cmp_version("1.3.3", "1+2+3") == -1);
 	assert(bootloader_cmp_version("1+2+3", "1.3.3") == 1);
+
+	printf("All tests passed!\n");
+
+	printf("Testing is_bad_entry...\n");
+
+	assert(bootloader_is_bad_entry("foo.conf") == 0);
+	assert(bootloader_is_bad_entry("foo+3.conf") == 0);
+	assert(bootloader_is_bad_entry("foo+0.conf") == 1);
+	assert(bootloader_is_bad_entry("foo+0-3.conf") == 1);
+	assert(bootloader_is_bad_entry("foo+00.efi") == 1);
+	assert(bootloader_is_bad_entry("foo+01.conf") == 0);
+
+	printf("Testing tick_counters_str...\n");
+
+	// Plain filename — pass-through
+	bootloader_tick_counters_str("foo.conf", buf, sizeof(buf));
+	assert(strcmp(buf, "foo.conf") == 0);
+
+	// +N only, no -M materialized
+	bootloader_tick_counters_str("foo+3.conf", buf, sizeof(buf));
+	assert(strcmp(buf, "foo+2.conf") == 0);
+
+	// +N-M: decrement left, increment done, widths preserved
+	bootloader_tick_counters_str("foo+3-00.conf", buf, sizeof(buf));
+	assert(strcmp(buf, "foo+2-01.conf") == 0);
+
+	// TRIES_LEFT width preserved on decrement
+	bootloader_tick_counters_str("foo+10.conf", buf, sizeof(buf));
+	assert(strcmp(buf, "foo+09.conf") == 0);
+
+	// TRIES_DONE allowed to grow
+	bootloader_tick_counters_str("foo+9-99.conf", buf, sizeof(buf));
+	assert(strcmp(buf, "foo+8-100.conf") == 0);
+
+	// +0 stays at 0 (still bootable, but pointless — caller guards via is_bad)
+	bootloader_tick_counters_str("foo+1.conf", buf, sizeof(buf));
+	assert(strcmp(buf, "foo+0.conf") == 0);
+
+	// UKI (.efi) suffix
+	bootloader_tick_counters_str("uki+3-0.efi", buf, sizeof(buf));
+	assert(strcmp(buf, "uki+2-1.efi") == 0);
 
 	printf("All tests passed!\n");
 

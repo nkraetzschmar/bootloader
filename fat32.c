@@ -311,9 +311,10 @@ static struct fat32_dir_entry * next_entry(struct fat32_dir_entry **entries, uin
 	return (void *) 0;
 }
 
-int16 for_each_dir_entry(void (*callback)(const char *entry_name, uint32 entry_cluster, uint32 entry_size))
+int16 for_each_dir_entry(void (*callback)(const char *entry_name, int32 entry_index, uint32 entry_cluster, uint32 entry_size))
 {
 	int16 error;
+	struct fat32_dir_entry *entries_start;
 	struct fat32_dir_entry *entries;
 	uint32 entries_len;
 	struct fat32_dir_entry *entry;
@@ -323,15 +324,81 @@ int16 for_each_dir_entry(void (*callback)(const char *entry_name, uint32 entry_c
 	error = load_dir();
 	if (error != 0) return error;
 
-	entries     = dir_cache.buf;
-	entries_len = dir_cache.num_entries;
+	entries_start = dir_cache.buf;
+	entries       = entries_start;
+	entries_len   = dir_cache.num_entries;
 
 	while ((entry = next_entry(&entries, &entries_len, &entry_name)) != (void *) 0) {
 		entry_cluster = (((uint32) entry->cluster_high) << 0x10) + entry->cluster_low;
-		callback(entry_name, entry_cluster, entry->size);
+		callback(entry_name, (int32)(entry - entries_start), entry_cluster, entry->size);
 	}
 
 	return 0;
+}
+
+struct dir_entry_handle make_handle(int32 entry_index)
+{
+	struct dir_entry_handle h;
+	h.dir_cluster = fs.current_dir;
+	h.entry_index = entry_index;
+	return h;
+}
+
+int16 open_handle(struct dir_entry_handle h)
+{
+	int16 error;
+	struct fat32_dir_entry *entry;
+
+	fs.current_dir = h.dir_cluster;
+
+	error = load_dir();
+	if (error != 0) return error;
+
+	if (h.entry_index < 0 || (uint32) h.entry_index >= dir_cache.num_entries) {
+		print_str("Handle entry_index out of range\r\n");
+		return -1;
+	}
+
+	entry = &dir_cache.buf[h.entry_index];
+
+	open_cluster((((uint32) entry->cluster_high) << 0x10) + entry->cluster_low, entry->size);
+	file.entry_index = h.entry_index;
+
+	return 0;
+}
+
+int16 get_file_name(char *name_out, uint16 name_out_len)
+{
+	int16 error;
+	struct fat32_dir_entry *entries_start;
+	struct fat32_dir_entry *entries;
+	uint32 entries_len;
+	struct fat32_dir_entry *entry;
+	char *entry_name;
+	uint16 i;
+
+	if (file.entry_index < 0) {
+		print_str("No file opened\r\n");
+		return -1;
+	}
+
+	error = load_dir();
+	if (error != 0) return error;
+
+	entries_start = dir_cache.buf;
+	entries       = entries_start;
+	entries_len   = dir_cache.num_entries;
+
+	while ((entry = next_entry(&entries, &entries_len, &entry_name)) != (void *) 0) {
+		if ((int32)(entry - entries_start) == file.entry_index) {
+			for (i = 0; i + 1 < name_out_len && entry_name[i] != 0x00; ++i) name_out[i] = entry_name[i];
+			name_out[i] = 0x00;
+			return 0;
+		}
+	}
+
+	print_str("Entry index not found in directory\r\n");
+	return -1;
 }
 
 void open_cluster(uint32 cluster, uint32 size)
